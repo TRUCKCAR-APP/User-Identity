@@ -35,6 +35,12 @@ spring:
     user: ${DB_USER:truckdar_admin}
     password: ${DB_PASSWORD:truckdar_password}
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
 app:
   jwt:
     secret: ${JWT_SECRET:TruckDarSecretKeySecurityAuthenticationToken2026MasterKey!}
@@ -55,3 +61,8 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
     tags-sorter: alpha
+
+truckdar:
+  kafka:
+    topic:
+      user-events: ${TRUCKDAR_USER_EVENTS_TOPIC:truckdar.events.user-events}
