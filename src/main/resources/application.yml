@@ -43,14 +43,8 @@ spring:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:TruckDarSecretKeySecurityAuthenticationToken2026MasterKey!}
-    secret-key: ${JWT_SECRET:TruckDarSecretKeySecurityAuthenticationToken2026MasterKey!}
-    access-token-expiration-ms: ${JWT_EXPIRATION_MS:86400000}
-    refresh-token-expiration-ms: ${REFRESH_TOKEN_EXPIRATION_MS:604800000}
-
-security:
-  jwt:
-    secret-key: ${JWT_SECRET:TruckDarSecretKeySecurityAuthenticationToken2026MasterKey!}
+    # Secreto JWT compartido con api-gateway y Notifications (Base64, >= 256 bits). Sin valor por defecto.
+    secret: ${TRUCKDAR_JWT_SECRET:${JWT_SECRET:}}
     access-token-expiration-ms: ${JWT_EXPIRATION_MS:86400000}
     refresh-token-expiration-ms: ${REFRESH_TOKEN_EXPIRATION_MS:604800000}
 

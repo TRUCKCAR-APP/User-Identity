@@ -12,6 +12,7 @@ import escuelaing.edu.co.truckdar.User_Identity.exception.InvalidTokenException;
 import escuelaing.edu.co.truckdar.User_Identity.exception.ResourceNotFoundException;
 import escuelaing.edu.co.truckdar.User_Identity.mapper.UserMapper;
 import escuelaing.edu.co.truckdar.User_Identity.model.RefreshToken;
+import escuelaing.edu.co.truckdar.User_Identity.model.Role;
 import escuelaing.edu.co.truckdar.User_Identity.model.User;
 import escuelaing.edu.co.truckdar.User_Identity.repository.RefreshTokenRepository;
 import escuelaing.edu.co.truckdar.User_Identity.repository.UserRepository;
@@ -23,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -31,6 +34,8 @@ import java.util.UUID;
 @Service
 @Transactional
 public class AuthServiceImpl implements AuthService {
+
+    private static final Set<Role> SELF_REGISTRABLE_ROLES = EnumSet.of(Role.CONDUCTOR, Role.COORDINADOR);
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -55,6 +60,11 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse register(RegisterRequest request) {
+        // El registro público solo crea conductores y coordinadores; ADMIN se otorga con PATCH /users/{id}/role.
+        if (!SELF_REGISTRABLE_ROLES.contains(request.getRole())) {
+            throw new IllegalArgumentException("El rol " + request.getRole()
+                    + " no está permitido en el registro público; solo CONDUCTOR o COORDINADOR");
+        }
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new DuplicateResourceException(
                     "Ya existe un usuario registrado con el email: " + request.getEmail());

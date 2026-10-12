@@ -28,7 +28,16 @@ public class JwtProvider {
             @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.access-token-expiration-ms}") long accessTokenExpirationMs,
             @Value("${app.jwt.refresh-token-expiration-ms}") long refreshTokenExpirationMs) {
-        this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "Defina TRUCKDAR_JWT_SECRET: secreto JWT en Base64 (>= 256 bits) compartido con api-gateway y Notifications");
+        }
+        try {
+            this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(
+                    "TRUCKDAR_JWT_SECRET debe ser un valor Base64 de al menos 256 bits", e);
+        }
         this.accessTokenExpirationMs = accessTokenExpirationMs;
         this.refreshTokenExpirationMs = refreshTokenExpirationMs;
     }

@@ -279,12 +279,16 @@ http://localhost:8080/swagger-ui.html
 # Construir la imagen
 docker build -t truckdar/user-identity:latest .
 
+# Secreto JWT compartido con api-gateway y Notifications (Base64, >= 256 bits).
+# Genérelo una vez, use el mismo valor en los tres servicios y nunca lo versione.
+export TRUCKDAR_JWT_SECRET="$(openssl rand -base64 64 | tr -d '\n')"
+
 # Ejecutar el contenedor
 docker run -p 8080:8080 \
   -e DB_URL=jdbc:postgresql://host.docker.internal:5432/truckdar_identity \
   -e DB_USERNAME=truckdar \
   -e DB_PASSWORD=truckdar \
-  -e JWT_SECRET=dHJ1Y2tkYXItdXNlci1pZGVudGl0eS1zZWNyZXQta2V5LWJhc2U2NC1lbmNvZGVkLWF0LWxlYXN0LTI1Ni1iaXRz \
+  -e TRUCKDAR_JWT_SECRET="$TRUCKDAR_JWT_SECRET" \
   -e SPRING_PROFILES_ACTIVE=local \
   truckdar/user-identity:latest
 ```
@@ -295,7 +299,7 @@ docker run -p 8080:8080 \
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `POST` | `/api/v1/auth/register` | Registro de usuario |
+| `POST` | `/api/v1/auth/register` | Registro de usuario (solo `CONDUCTOR` o `COORDINADOR`; `ADMIN` responde 400) |
 | `POST` | `/api/v1/auth/login` | Login (access + refresh token) |
 | `POST` | `/api/v1/auth/refresh` | Renovar access token |
 | `POST` | `/api/v1/auth/logout` | Revocar refresh token |
@@ -315,7 +319,8 @@ docker run -p 8080:8080 \
 | `DB_URL` | JDBC URL de PostgreSQL | `jdbc:postgresql://localhost:5432/truckdar_identity` |
 | `DB_USERNAME` | Usuario de la BD | `truckdar` |
 | `DB_PASSWORD` | Contraseña de la BD | `truckdar` |
-| `JWT_SECRET` | Secret para firmar JWTs (Base64) | *(dev default)* |
+| `TRUCKDAR_JWT_SECRET` | Secreto para firmar JWTs (Base64, >= 256 bits). Debe ser **el mismo** en User-Identity, api-gateway y Notifications | *(obligatorio: sin él el servicio no arranca)* |
+| `JWT_SECRET` | Nombre heredado del secreto; solo se usa si `TRUCKDAR_JWT_SECRET` no está definido | — |
 | `JWT_ACCESS_EXPIRATION` | TTL del access token (ms) | `900000` (15 min) |
 | `JWT_REFRESH_EXPIRATION` | TTL del refresh token (ms) | `604800000` (7 días) |
 | `SERVER_PORT` | Puerto del servidor | `8080` |

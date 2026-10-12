@@ -116,6 +116,25 @@ class AuthServiceImplTest {
     }
 
     @Test
+    @DisplayName("register() — el registro público no permite autoasignarse ADMIN")
+    void register_adminRoleIsRejected() {
+        RegisterRequest request = RegisterRequest.builder()
+                .email("intruso@truckdar.co")
+                .password("Segura123!")
+                .firstName("Intruso")
+                .lastName("Admin")
+                .role(Role.ADMIN)
+                .build();
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ADMIN");
+        verify(userRepository, org.mockito.Mockito.never()).save(any(User.class));
+        verify(eventPublisher, org.mockito.Mockito.never())
+                .publish(any(escuelaing.edu.co.truckdar.User_Identity.event.UserRegisteredEvent.class));
+    }
+
+    @Test
     @DisplayName("login() — credenciales válidas devuelve tokens")
     void login_success() {
         LoginRequest request = LoginRequest.builder()
