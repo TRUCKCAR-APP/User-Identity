@@ -35,7 +35,7 @@ import java.util.UUID;
 @Transactional
 public class AuthServiceImpl implements AuthService {
 
-    private static final Set<Role> SELF_REGISTRABLE_ROLES = EnumSet.of(Role.CONDUCTOR, Role.COORDINADOR);
+    private static final Set<Role> SELF_REGISTRABLE_ROLES = EnumSet.of(Role.CONDUCTOR, Role.COORDINADOR, Role.GENERADOR);
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -60,10 +60,10 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse register(RegisterRequest request) {
-        // El registro público solo crea conductores y coordinadores; ADMIN se otorga con PATCH /users/{id}/role.
+        // El registro público crea conductores, coordinadores y generadores; ADMIN se otorga con PATCH /users/{id}/role.
         if (!SELF_REGISTRABLE_ROLES.contains(request.getRole())) {
             throw new IllegalArgumentException("El rol " + request.getRole()
-                    + " no está permitido en el registro público; solo CONDUCTOR o COORDINADOR");
+                    + " no está permitido en el registro público; solo CONDUCTOR, COORDINADOR o GENERADOR");
         }
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new DuplicateResourceException(
