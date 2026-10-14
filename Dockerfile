@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════
-# Multi-stage Dockerfile — TruckDar User-Identity Microservice
+# Multi-stage Dockerfile — TruckCar User-Identity Microservice
 # Stage 1: Build con Maven + JDK 21
 # Stage 2: Runtime con JRE 21 slim
 # ═══════════════════════════════════════════════════════════════════

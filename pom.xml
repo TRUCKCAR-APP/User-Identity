@@ -11,11 +11,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>escuelaing.edu.co.truckdar</groupId>
+    <groupId>escuelaing.edu.co.truckcar</groupId>
     <artifactId>user-identity</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>User-Identity</name>
-    <description>TruckDar User Identity Microservice — authentication, authorization and user management</description>
+    <description>TruckCar User Identity Microservice — authentication, authorization and user management</description>
 
     <properties>
         <java.version>21</java.version>

@@ -6,9 +6,9 @@ spring:
     name: user-identity
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:truckdar_db}
-    username: ${DB_USER:truckdar_admin}
-    password: ${DB_PASSWORD:truckdar_password}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:truckcar_db}
+    username: ${DB_USER:truckcar_admin}
+    password: ${DB_PASSWORD:truckcar_password}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: user-identity-hikari-pool
@@ -30,13 +30,13 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
-    # Historial propio: truckdar_db es compartida y Notifications también usa Flyway; con la tabla por defecto
+    # Historial propio: truckcar_db es compartida y Notifications también usa Flyway; con la tabla por defecto
     # las versiones de ambos servicios se mezclarían (una V2 de uno daría por aplicada la V2 del otro).
     table: flyway_schema_history_user_identity
     locations: classpath:db/migration
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:truckdar_db}
-    user: ${DB_USER:truckdar_admin}
-    password: ${DB_PASSWORD:truckdar_password}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:truckcar_db}
+    user: ${DB_USER:truckcar_admin}
+    password: ${DB_PASSWORD:truckcar_password}
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -47,7 +47,7 @@ spring:
 app:
   jwt:
     # Secreto JWT compartido con api-gateway y Notifications (Base64, >= 256 bits). Sin valor por defecto.
-    secret: ${TRUCKDAR_JWT_SECRET:${JWT_SECRET:}}
+    secret: ${TRUCKCAR_JWT_SECRET:${JWT_SECRET:}}
     access-token-expiration-ms: ${JWT_EXPIRATION_MS:86400000}
     refresh-token-expiration-ms: ${REFRESH_TOKEN_EXPIRATION_MS:604800000}
 
@@ -59,7 +59,7 @@ springdoc:
     operations-sorter: method
     tags-sorter: alpha
 
-truckdar:
+truckcar:
   kafka:
     topic:
-      user-events: ${TRUCKDAR_USER_EVENTS_TOPIC:truckdar.events.user-events}
+      user-events: ${TRUCKCAR_USER_EVENTS_TOPIC:truckcar.events.user-events}

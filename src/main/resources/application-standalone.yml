@@ -5,7 +5,7 @@
 
 spring:
   datasource:
-    url: jdbc:h2:mem:truckdar_identity;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    url: jdbc:h2:mem:truckcar_identity;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
     driver-class-name: org.h2.Driver
     username: sa
     password: 
@@ -25,5 +25,5 @@ spring:
 
 logging:
   level:
-    escuelaing.edu.co.truckdar: DEBUG
+    escuelaing.edu.co.truckcar: DEBUG
     org.springframework.security: DEBUG

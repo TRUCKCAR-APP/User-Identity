@@ -17,4 +17,4 @@ spring:
 logging:
   level:
     root: WARN
-    escuelaing.edu.co.truckdar: INFO
+    escuelaing.edu.co.truckcar: INFO

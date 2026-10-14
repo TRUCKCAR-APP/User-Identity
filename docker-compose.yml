@@ -7,17 +7,17 @@ services:
   # ── PostgreSQL ──
   postgres:
     image: postgres:16-alpine
-    container_name: truckdar-identity-db
+    container_name: truckcar-identity-db
     environment:
-      POSTGRES_DB: truckdar_identity
-      POSTGRES_USER: truckdar
-      POSTGRES_PASSWORD: truckdar
+      POSTGRES_DB: truckcar_identity
+      POSTGRES_USER: truckcar
+      POSTGRES_PASSWORD: truckcar
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U truckdar -d truckdar_identity"]
+      test: ["CMD-SHELL", "pg_isready -U truckcar -d truckcar_identity"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,9 +25,9 @@ services:
   # ── pgAdmin (opcional, útil para inspección visual) ──
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: truckdar-pgadmin
+    container_name: truckcar-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@truckdar.co
+      PGADMIN_DEFAULT_EMAIL: admin@truckcar.co
       PGADMIN_DEFAULT_PASSWORD: admin
     ports:
       - "5050:80"

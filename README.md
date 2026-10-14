@@ -1,7 +1,7 @@
-# TruckDar — User-Identity Microservice
+# TruckCar — User-Identity Microservice
 
 Microservicio de **identidad, autenticación y autorización** de la plataforma
-TruckDar. Gestiona el ciclo de vida de usuarios (conductores, coordinadores,
+TruckCar. Gestiona el ciclo de vida de usuarios (conductores, coordinadores,
 administradores), autenticación JWT (access + refresh tokens) y publica
 eventos de dominio al bus de eventos compartido.
 
@@ -23,7 +23,7 @@ eventos de dominio al bus de eventos compartido.
 
 ## Arquitectura del Microservicio
 
-### 1. Diagrama de Contexto (Ecosistema TruckDar)
+### 1. Diagrama de Contexto (Ecosistema TruckCar)
 
 ```mermaid
 flowchart TB
@@ -49,7 +49,7 @@ flowchart TB
     end
 
     subgraph Datos["Almacenamiento de Datos"]
-        PostgresDB[("🐘 PostgreSQL 16<br/>truckdar_identity")]
+        PostgresDB[("🐘 PostgreSQL 16<br/>truckcar_identity")]
     end
 
     subgraph Eventos["Bus de Eventos Asíncrono"]
@@ -222,9 +222,9 @@ docker compose up -d postgres
 ```
 
 Esto levanta PostgreSQL en `localhost:5432` con:
-- DB: `truckdar_identity`
-- User: `truckdar`
-- Password: `truckdar`
+- DB: `truckcar_identity`
+- User: `truckcar`
+- Password: `truckcar`
 
 > **Tip:** También puedes levantar pgAdmin en `localhost:5050` con
 > `docker compose up -d pgadmin`
@@ -243,7 +243,7 @@ Esto levanta PostgreSQL en `localhost:5432` con:
 ```
 
 El servicio arranca en `http://localhost:8080`.
-*(En el modo `standalone`, la consola de base de datos H2 queda disponible en `http://localhost:8080/h2-console` con JDBC URL `jdbc:h2:mem:truckdar_identity` y usuario `sa`)*.
+*(En el modo `standalone`, la consola de base de datos H2 queda disponible en `http://localhost:8080/h2-console` con JDBC URL `jdbc:h2:mem:truckcar_identity` y usuario `sa`)*.
 
 ### 3. Acceder a Swagger UI
 
@@ -277,20 +277,20 @@ http://localhost:8080/swagger-ui.html
 
 ```bash
 # Construir la imagen
-docker build -t truckdar/user-identity:latest .
+docker build -t truckcar/user-identity:latest .
 
 # Secreto JWT compartido con api-gateway y Notifications (Base64, >= 256 bits).
 # Genérelo una vez, use el mismo valor en los tres servicios y nunca lo versione.
-export TRUCKDAR_JWT_SECRET="$(openssl rand -base64 64 | tr -d '\n')"
+export TRUCKCAR_JWT_SECRET="$(openssl rand -base64 64 | tr -d '\n')"
 
 # Ejecutar el contenedor
 docker run -p 8080:8080 \
-  -e DB_URL=jdbc:postgresql://host.docker.internal:5432/truckdar_identity \
-  -e DB_USERNAME=truckdar \
-  -e DB_PASSWORD=truckdar \
-  -e TRUCKDAR_JWT_SECRET="$TRUCKDAR_JWT_SECRET" \
+  -e DB_URL=jdbc:postgresql://host.docker.internal:5432/truckcar_identity \
+  -e DB_USERNAME=truckcar \
+  -e DB_PASSWORD=truckcar \
+  -e TRUCKCAR_JWT_SECRET="$TRUCKCAR_JWT_SECRET" \
   -e SPRING_PROFILES_ACTIVE=local \
-  truckdar/user-identity:latest
+  truckcar/user-identity:latest
 ```
 
 ---
@@ -316,11 +316,11 @@ docker run -p 8080:8080 \
 
 | Variable | Descripción | Default |
 |---|---|---|
-| `DB_URL` | JDBC URL de PostgreSQL | `jdbc:postgresql://localhost:5432/truckdar_identity` |
-| `DB_USERNAME` | Usuario de la BD | `truckdar` |
-| `DB_PASSWORD` | Contraseña de la BD | `truckdar` |
-| `TRUCKDAR_JWT_SECRET` | Secreto para firmar JWTs (Base64, >= 256 bits). Debe ser **el mismo** en User-Identity, api-gateway y Notifications | *(obligatorio: sin él el servicio no arranca)* |
-| `JWT_SECRET` | Nombre heredado del secreto; solo se usa si `TRUCKDAR_JWT_SECRET` no está definido | — |
+| `DB_URL` | JDBC URL de PostgreSQL | `jdbc:postgresql://localhost:5432/truckcar_identity` |
+| `DB_USERNAME` | Usuario de la BD | `truckcar` |
+| `DB_PASSWORD` | Contraseña de la BD | `truckcar` |
+| `TRUCKCAR_JWT_SECRET` | Secreto para firmar JWTs (Base64, >= 256 bits). Debe ser **el mismo** en User-Identity, api-gateway y Notifications | *(obligatorio: sin él el servicio no arranca)* |
+| `JWT_SECRET` | Nombre heredado del secreto; solo se usa si `TRUCKCAR_JWT_SECRET` no está definido | — |
 | `JWT_ACCESS_EXPIRATION` | TTL del access token (ms) | `900000` (15 min) |
 | `JWT_REFRESH_EXPIRATION` | TTL del refresh token (ms) | `604800000` (7 días) |
 | `SERVER_PORT` | Puerto del servidor | `8080` |
@@ -330,7 +330,7 @@ docker run -p 8080:8080 \
 ## Estructura del proyecto
 
 ```
-src/main/java/escuelaing/edu/co/truckdar/User_Identity/
+src/main/java/escuelaing/edu/co/truckcar/User_Identity/
 ├── controller/          # REST controllers
 ├── service/             # Interfaces de lógica de negocio
 │   └── impl/            # Implementaciones

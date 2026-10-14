@@ -13,4 +13,4 @@ spring:
 
 logging:
   level:
-    escuelaing.edu.co.truckdar: INFO
+    escuelaing.edu.co.truckcar: INFO

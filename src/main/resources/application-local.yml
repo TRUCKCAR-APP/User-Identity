@@ -4,14 +4,14 @@
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/truckdar_identity
-    username: truckdar
-    password: truckdar
+    url: jdbc:postgresql://localhost:5432/truckcar_identity
+    username: truckcar
+    password: truckcar
 
   jpa:
     show-sql: true
 
 logging:
   level:
-    escuelaing.edu.co.truckdar: DEBUG
+    escuelaing.edu.co.truckcar: DEBUG
     org.springframework.security: DEBUG
