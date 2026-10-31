@@ -5,6 +5,7 @@ import escuelaing.edu.co.truckcar.User_Identity.dto.request.RefreshTokenRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.request.RegisterRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.response.AuthResponse;
 import escuelaing.edu.co.truckcar.User_Identity.event.DomainEventPublisher;
+import escuelaing.edu.co.truckcar.User_Identity.exception.AccountSuspendedException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.DuplicateResourceException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.InvalidTokenException;
 import escuelaing.edu.co.truckcar.User_Identity.mapper.UserMapper;
@@ -35,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -100,7 +102,7 @@ class AuthServiceImplTest {
     }
 
     @ParameterizedTest(name = "register() — el registro público acepta el rol {0}")
-    @EnumSource(value = Role.class, names = {"CONDUCTOR", "COORDINADOR", "GENERADOR"})
+    @EnumSource(value = Role.class, names = {"CONDUCTOR", "GENERADOR"})
     void register_publicRolesAreAccepted(Role role) {
         RegisterRequest request = RegisterRequest.builder()
                 .email(role.name().toLowerCase() + "@truckcar.co")
@@ -144,20 +146,20 @@ class AuthServiceImplTest {
                 .hasMessageContaining("juan@truckcar.co");
     }
 
-    @Test
-    @DisplayName("register() — el registro público no permite autoasignarse ADMIN")
-    void register_adminRoleIsRejected() {
+    @ParameterizedTest(name = "register() — el registro público no permite autoasignarse {0}")
+    @EnumSource(value = Role.class, names = {"ADMIN", "COORDINADOR"})
+    void register_privilegedRolesAreRejected(Role role) {
         RegisterRequest request = RegisterRequest.builder()
                 .email("intruso@truckcar.co")
                 .password("Segura123!")
                 .firstName("Intruso")
-                .lastName("Admin")
-                .role(Role.ADMIN)
+                .lastName(role.name())
+                .role(role)
                 .build();
 
         assertThatThrownBy(() -> authService.register(request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("ADMIN");
+                .hasMessageContaining(role.name());
         verify(userRepository, org.mockito.Mockito.never()).save(any(User.class));
         verify(eventPublisher, org.mockito.Mockito.never())
                 .publish(any(escuelaing.edu.co.truckcar.User_Identity.event.UserRegisteredEvent.class));
@@ -207,6 +209,26 @@ class AuthServiceImplTest {
     }
 
     @Test
+    @DisplayName("login() / refresh() — una cuenta suspendida no obtiene tokens")
+    void suspendedAccountGetsNoTokens() {
+        sampleUser.setStatus(UserStatus.SUSPENDED);
+        when(userRepository.findByEmail("juan@truckcar.co")).thenReturn(Optional.of(sampleUser));
+        when(passwordEncoder.matches("Segura123!", sampleUser.getPasswordHash())).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(LoginRequest.builder()
+                .email("juan@truckcar.co").password("Segura123!").build()))
+                .isInstanceOf(AccountSuspendedException.class);
+
+        RefreshToken stored = activeRefreshToken();
+        when(refreshTokenRepository.findByTokenAndRevokedFalse("old-refresh")).thenReturn(Optional.of(stored));
+        when(userRepository.findById(sampleUser.getId())).thenReturn(Optional.of(sampleUser));
+
+        assertThatThrownBy(() -> authService.refresh(RefreshTokenRequest.builder().refreshToken("old-refresh").build()))
+                .isInstanceOf(AccountSuspendedException.class);
+        verify(jwtProvider, never()).generateAccessToken(any(), anyString(), anyString());
+    }
+
+    @Test
     @DisplayName("refresh() — token inválido lanza InvalidTokenException")
     void refresh_invalidToken() {
         RefreshTokenRequest request = RefreshTokenRequest.builder()
@@ -218,5 +240,47 @@ class AuthServiceImplTest {
 
         assertThatThrownBy(() -> authService.refresh(request))
                 .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    @DisplayName("refresh() — rota el token: revoca el usado y emite un par nuevo")
+    void refresh_rotatesToken() {
+        RefreshToken stored = activeRefreshToken();
+        when(refreshTokenRepository.findByTokenAndRevokedFalse("old-refresh")).thenReturn(Optional.of(stored));
+        when(userRepository.findById(sampleUser.getId())).thenReturn(Optional.of(sampleUser));
+        when(refreshTokenRepository.revokeIfActive(stored.getId())).thenReturn(1);
+        when(jwtProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("access-token");
+        when(jwtProvider.generateRefreshToken()).thenReturn("new-refresh");
+        when(jwtProvider.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtProvider.getRefreshTokenExpirationMs()).thenReturn(604800000L);
+        when(refreshTokenRepository.save(any())).thenReturn(RefreshToken.builder().build());
+
+        AuthResponse response = authService.refresh(RefreshTokenRequest.builder().refreshToken("old-refresh").build());
+
+        assertThat(response.getRefreshToken()).isEqualTo("new-refresh");
+        verify(refreshTokenRepository).revokeIfActive(stored.getId());
+    }
+
+    @Test
+    @DisplayName("refresh() — el mismo token usado dos veces a la vez solo emite un par")
+    void refresh_concurrentReuseIsRejected() {
+        RefreshToken stored = activeRefreshToken();
+        when(refreshTokenRepository.findByTokenAndRevokedFalse("old-refresh")).thenReturn(Optional.of(stored));
+        when(userRepository.findById(sampleUser.getId())).thenReturn(Optional.of(sampleUser));
+        // Otra petición ya lo revocó entre la lectura y el UPDATE.
+        when(refreshTokenRepository.revokeIfActive(stored.getId())).thenReturn(0);
+
+        assertThatThrownBy(() -> authService.refresh(RefreshTokenRequest.builder().refreshToken("old-refresh").build()))
+                .isInstanceOf(InvalidTokenException.class);
+        verify(jwtProvider, never()).generateRefreshToken();
+    }
+
+    private RefreshToken activeRefreshToken() {
+        return RefreshToken.builder()
+                .id(UUID.randomUUID())
+                .userId(sampleUser.getId())
+                .token("old-refresh")
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
     }
 }

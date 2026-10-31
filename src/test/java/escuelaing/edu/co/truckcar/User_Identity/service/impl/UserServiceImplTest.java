@@ -11,6 +11,7 @@ import escuelaing.edu.co.truckcar.User_Identity.mapper.UserMapper;
 import escuelaing.edu.co.truckcar.User_Identity.model.Role;
 import escuelaing.edu.co.truckcar.User_Identity.model.User;
 import escuelaing.edu.co.truckcar.User_Identity.model.UserStatus;
+import escuelaing.edu.co.truckcar.User_Identity.repository.RefreshTokenRepository;
 import escuelaing.edu.co.truckcar.User_Identity.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +28,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +37,7 @@ import static org.mockito.Mockito.when;
 class UserServiceImplTest {
 
     @Mock private UserRepository userRepository;
+    @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private UserMapper userMapper;
     @Mock private DomainEventPublisher eventPublisher;
 
@@ -123,6 +126,24 @@ class UserServiceImplTest {
         UserResponse result = userService.changeStatus(userId, request);
 
         assertThat(result).isNotNull();
+        // La suspensión cierra las sesiones: sin refresh tokens no puede renovar el access token.
+        verify(refreshTokenRepository).revokeAllByUserId(userId);
+    }
+
+    @Test
+    @DisplayName("changeRole() / changeStatus() — no dejan la plataforma sin ADMIN activo")
+    void lastActiveAdminCannotBeDemotedOrSuspended() {
+        sampleUser.setRole(Role.ADMIN);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(sampleUser));
+        when(userRepository.countByRoleAndStatus(Role.ADMIN, UserStatus.ACTIVE)).thenReturn(1L);
+
+        assertThatThrownBy(() -> userService.changeRole(userId,
+                ChangeRoleRequest.builder().role(Role.COORDINADOR).build()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> userService.changeStatus(userId,
+                ChangeStatusRequest.builder().status(UserStatus.SUSPENDED).build()))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
@@ -140,5 +161,7 @@ class UserServiceImplTest {
 
         assertThat(result).isNotNull();
         verify(eventPublisher).publish(any(UserRoleChangedEvent.class));
+        // El rol viaja en el JWT: el anterior deja de valer al revocar los refresh tokens.
+        verify(refreshTokenRepository).revokeAllByUserId(userId);
     }
 }

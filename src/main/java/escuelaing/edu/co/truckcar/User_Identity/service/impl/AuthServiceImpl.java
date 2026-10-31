@@ -7,6 +7,7 @@ import escuelaing.edu.co.truckcar.User_Identity.dto.response.AuthResponse;
 import escuelaing.edu.co.truckcar.User_Identity.dto.response.MessageResponse;
 import escuelaing.edu.co.truckcar.User_Identity.event.DomainEventPublisher;
 import escuelaing.edu.co.truckcar.User_Identity.event.UserRegisteredEvent;
+import escuelaing.edu.co.truckcar.User_Identity.exception.AccountSuspendedException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.DuplicateResourceException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.InvalidTokenException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.ResourceNotFoundException;
@@ -14,6 +15,7 @@ import escuelaing.edu.co.truckcar.User_Identity.mapper.UserMapper;
 import escuelaing.edu.co.truckcar.User_Identity.model.RefreshToken;
 import escuelaing.edu.co.truckcar.User_Identity.model.Role;
 import escuelaing.edu.co.truckcar.User_Identity.model.User;
+import escuelaing.edu.co.truckcar.User_Identity.model.UserStatus;
 import escuelaing.edu.co.truckcar.User_Identity.repository.RefreshTokenRepository;
 import escuelaing.edu.co.truckcar.User_Identity.repository.UserRepository;
 import escuelaing.edu.co.truckcar.User_Identity.security.JwtProvider;
@@ -35,7 +37,11 @@ import java.util.UUID;
 @Transactional
 public class AuthServiceImpl implements AuthService {
 
-    private static final Set<Role> SELF_REGISTRABLE_ROLES = EnumSet.of(Role.CONDUCTOR, Role.COORDINADOR, Role.GENERADOR);
+    /**
+     * Roles del registro público. COORDINADOR (torre de control: ve toda la flota, asigna cargas y crea restricciones)
+     * y ADMIN solo los asigna un ADMIN con PATCH /api/v1/users/{id}/role.
+     */
+    private static final Set<Role> SELF_REGISTRABLE_ROLES = EnumSet.of(Role.CONDUCTOR, Role.GENERADOR);
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -63,7 +69,8 @@ public class AuthServiceImpl implements AuthService {
         // El registro público crea conductores, coordinadores y generadores; ADMIN se otorga con PATCH /users/{id}/role.
         if (!SELF_REGISTRABLE_ROLES.contains(request.getRole())) {
             throw new IllegalArgumentException("El rol " + request.getRole()
-                    + " no está permitido en el registro público; solo CONDUCTOR, COORDINADOR o GENERADOR");
+                    + " no está permitido en el registro público; solo CONDUCTOR o GENERADOR"
+                    + " (COORDINADOR lo asigna un administrador)");
         }
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new DuplicateResourceException(
@@ -93,6 +100,7 @@ public class AuthServiceImpl implements AuthService {
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new BadCredentialsException("Credenciales inválidas");
         }
+        requireNotSuspended(user);
 
         user.setLastLoginAt(Instant.now());
         userRepository.save(user);
@@ -101,6 +109,8 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    // Sin rollback al rechazar: la revocación de un token expirado debe quedar guardada.
+    @Transactional(noRollbackFor = InvalidTokenException.class)
     public AuthResponse refresh(RefreshTokenRequest request) {
         RefreshToken storedToken = refreshTokenRepository
                 .findByTokenAndRevokedFalse(request.getRefreshToken())
@@ -114,10 +124,14 @@ public class AuthServiceImpl implements AuthService {
 
         User user = userRepository.findById(storedToken.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+        // Una cuenta suspendida no renueva: su sesión termina al vencer el access token (15 min).
+        requireNotSuspended(user);
 
-        // Revocar el refresh token usado (rotación de tokens)
-        storedToken.setRevoked(true);
-        refreshTokenRepository.save(storedToken);
+        // Revocar el refresh token usado (rotación de tokens). El UPDATE condicional impide que dos peticiones
+        // concurrentes con el mismo token obtengan cada una un par nuevo.
+        if (refreshTokenRepository.revokeIfActive(storedToken.getId()) == 0) {
+            throw new InvalidTokenException("Refresh token inválido o revocado");
+        }
 
         return generateAuthResponse(user);
     }
@@ -131,6 +145,12 @@ public class AuthServiceImpl implements AuthService {
     }
 
     // ──────────────────────────── helpers ────────────────────────────
+
+    private static void requireNotSuspended(User user) {
+        if (user.getStatus() == UserStatus.SUSPENDED) {
+            throw new AccountSuspendedException("La cuenta está suspendida; contacte a un administrador");
+        }
+    }
 
     private AuthResponse generateAuthResponse(User user) {
         String accessToken = jwtProvider.generateAccessToken(

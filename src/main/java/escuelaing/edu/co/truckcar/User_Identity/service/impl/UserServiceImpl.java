@@ -11,6 +11,7 @@ import escuelaing.edu.co.truckcar.User_Identity.mapper.UserMapper;
 import escuelaing.edu.co.truckcar.User_Identity.model.Role;
 import escuelaing.edu.co.truckcar.User_Identity.model.User;
 import escuelaing.edu.co.truckcar.User_Identity.model.UserStatus;
+import escuelaing.edu.co.truckcar.User_Identity.repository.RefreshTokenRepository;
 import escuelaing.edu.co.truckcar.User_Identity.repository.UserRepository;
 import escuelaing.edu.co.truckcar.User_Identity.service.UserService;
 import org.springframework.data.domain.Page;
@@ -29,13 +30,16 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final UserMapper userMapper;
     private final DomainEventPublisher eventPublisher;
 
     public UserServiceImpl(UserRepository userRepository,
+                            RefreshTokenRepository refreshTokenRepository,
                             UserMapper userMapper,
                             DomainEventPublisher eventPublisher) {
         this.userRepository = userRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
         this.userMapper = userMapper;
         this.eventPublisher = eventPublisher;
     }
@@ -68,17 +72,34 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse changeStatus(UUID id, ChangeStatusRequest request) {
         User user = findUserOrThrow(id);
+        if (request.getStatus() == UserStatus.SUSPENDED) {
+            requireAnotherActiveAdmin(user);
+        }
         user.setStatus(request.getStatus());
-        return userMapper.toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        if (saved.getStatus() == UserStatus.SUSPENDED) {
+            // Sin refresh tokens la sesión termina al vencer el access token (15 min).
+            refreshTokenRepository.revokeAllByUserId(saved.getId());
+        }
+        return userMapper.toResponse(saved);
     }
 
     @Override
     @Transactional
     public UserResponse changeRole(UUID id, ChangeRoleRequest request) {
         User user = findUserOrThrow(id);
+        if (user.getRole() == request.getRole()) {
+            return userMapper.toResponse(user);
+        }
+        if (request.getRole() != Role.ADMIN) {
+            requireAnotherActiveAdmin(user);
+        }
         String oldRole = user.getRole().name();
         user.setRole(request.getRole());
         User saved = userRepository.save(user);
+        // El rol viaja en el JWT: se revocan los refresh tokens para que el rol anterior deje de valer en 15 min y
+        // la próxima sesión ya lleve el nuevo.
+        refreshTokenRepository.revokeAllByUserId(saved.getId());
 
         // Publicar evento de cambio de rol
         eventPublisher.publish(new UserRoleChangedEvent(
@@ -89,6 +110,14 @@ public class UserServiceImpl implements UserService {
         ));
 
         return userMapper.toResponse(saved);
+    }
+
+    /** Quitar el rol o suspender al único ADMIN activo dejaría la plataforma sin administración. */
+    private void requireAnotherActiveAdmin(User user) {
+        if (user.getRole() == Role.ADMIN && user.getStatus() == UserStatus.ACTIVE
+                && userRepository.countByRoleAndStatus(Role.ADMIN, UserStatus.ACTIVE) <= 1) {
+            throw new IllegalArgumentException("No se puede degradar ni suspender al único administrador activo");
+        }
     }
 
     private User findUserOrThrow(UUID id) {
