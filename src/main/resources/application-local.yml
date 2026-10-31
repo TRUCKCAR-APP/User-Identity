@@ -5,8 +5,8 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/truckcar_identity
-    username: truckcar
-    password: truckcar
+    username: ${DB_USER:truckcar}
+    password: ${DB_PASSWORD:}
 
   jpa:
     show-sql: true

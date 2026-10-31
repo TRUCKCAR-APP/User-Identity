@@ -10,7 +10,8 @@ spring:
     # PgBouncer (SPRING_DATASOURCE_URL) y el search_path lo fija el rol user_identity.
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:truckcar_db}?currentSchema=user_identity,public
     username: ${DB_USER:truckcar_admin}
-    password: ${DB_PASSWORD:truckcar_password}
+    # Sin valor por defecto: fuera de Docker se define DB_PASSWORD (en el CI, el de su PostgreSQL efímero).
+    password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: user-identity-hikari-pool
