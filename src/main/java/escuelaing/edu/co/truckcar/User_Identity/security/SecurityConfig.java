@@ -49,7 +49,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                     // ── Públicos ──
                     .requestMatchers("/api/v1/auth/**").permitAll()
-                    .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                    // /actuator/prometheus: solo lo alcanza Prometheus en la red interna (el api-gateway no enruta /actuator/**).
+                    .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/prometheus").permitAll()
                     .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                     .requestMatchers("/h2-console/**").permitAll()
                     .requestMatchers("/error").permitAll()
