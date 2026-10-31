@@ -1,9 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════════
 -- V1 — Esquema inicial: tablas users y refresh_tokens
--- TruckCar User-Identity Microservice
+-- TruckCar User-Identity Microservice. Idempotente: en bases existentes db-init ya movió estas tablas al
+-- esquema user_identity y aquí no cambia nada.
 -- ═══════════════════════════════════════════════════════════════════
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
     email           VARCHAR(255)    NOT NULL UNIQUE,
     password_hash   VARCHAR(255)    NOT NULL,
@@ -19,11 +20,11 @@ CREATE TABLE users (
     last_login_at   TIMESTAMPTZ
 );
 
-CREATE INDEX idx_users_email  ON users (email);
-CREATE INDEX idx_users_role   ON users (role);
-CREATE INDEX idx_users_status ON users (status);
+CREATE INDEX IF NOT EXISTS idx_users_email  ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_role   ON users (role);
+CREATE INDEX IF NOT EXISTS idx_users_status ON users (status);
 
-CREATE TABLE refresh_tokens (
+CREATE TABLE IF NOT EXISTS refresh_tokens (
     id          UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token       VARCHAR(255)    NOT NULL UNIQUE,
@@ -31,8 +32,8 @@ CREATE TABLE refresh_tokens (
     revoked     BOOLEAN         NOT NULL DEFAULT FALSE
 );
 
-CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens (user_id);
-CREATE INDEX idx_refresh_tokens_token   ON refresh_tokens (token);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token   ON refresh_tokens (token);
 
 -- El ADMIN inicial no se siembra aquí (sin credenciales en el repositorio): lo crea AdminBootstrap al arrancar
 -- con TRUCKCAR_ADMIN_EMAIL / TRUCKCAR_ADMIN_PASSWORD.

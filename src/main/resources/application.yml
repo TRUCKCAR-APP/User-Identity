@@ -6,7 +6,9 @@ spring:
     name: user-identity
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:truckcar_db}
+    # Fuera de Docker (IDE/tests) la conexión es directa y el esquema va en currentSchema. En Docker se pasa por
+    # PgBouncer (SPRING_DATASOURCE_URL) y el search_path lo fija el rol user_identity.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:truckcar_db}?currentSchema=user_identity,public
     username: ${DB_USER:truckcar_admin}
     password: ${DB_PASSWORD:truckcar_password}
     driver-class-name: org.postgresql.Driver
@@ -20,7 +22,8 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      # El esquema lo gestiona Flyway (db/migration); Hibernate solo comprueba que coincida con las entidades.
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
@@ -29,14 +32,15 @@ spring:
 
   flyway:
     enabled: true
+    # Esquema propio del servicio (rol y esquema creados por db-init); el historial de Flyway vive en él y Flyway
+    # usa la misma conexión que la aplicación.
+    schemas: user_identity
+    default-schema: user_identity
+    # Bases anteriores a Flyway en el esquema (tablas movidas desde public): línea base 0 para que V1 y V2
+    # (idempotentes) se apliquen.
     baseline-on-migrate: true
-    # Historial propio: truckcar_db es compartida y Notifications también usa Flyway; con la tabla por defecto
-    # las versiones de ambos servicios se mezclarían (una V2 de uno daría por aplicada la V2 del otro).
-    table: flyway_schema_history_user_identity
+    baseline-version: 0
     locations: classpath:db/migration
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:truckcar_db}
-    user: ${DB_USER:truckcar_admin}
-    password: ${DB_PASSWORD:truckcar_password}
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
