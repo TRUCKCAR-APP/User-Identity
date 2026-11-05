@@ -6,12 +6,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 import java.util.stream.Collectors;
@@ -75,9 +77,32 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+    /** JSON mal formado, UTF-8 inválido o un valor que no corresponde al tipo (rol desconocido): error del cliente. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex,
+                                                              HttpServletRequest request) {
+        log.debug("Cuerpo ilegible en {}: {}", request.getRequestURI(), ex.getMessage());
+        // Sin el detalle del parser en la respuesta: puede incluir fragmentos del cuerpo (una contraseña) y clases internas.
+        return buildResponse(HttpStatus.BAD_REQUEST,
+                "El cuerpo debe ser JSON válido en UTF-8 con los campos y valores esperados", request);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                            HttpServletRequest request) {
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getName() + ": valor con un tipo incorrecto", request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex,
                                                         HttpServletRequest request) {
+        // Excepciones de Spring MVC con su propio estado (405, 415, parámetro faltante...): este handler genérico las
+        // capturaría antes que el resolver por defecto y las convertiría en 500.
+        if (ex instanceof org.springframework.web.ErrorResponse errorResponse
+                && errorResponse.getStatusCode().is4xxClientError()) {
+            return buildResponse(HttpStatus.valueOf(errorResponse.getStatusCode().value()),
+                    errorResponse.getBody().getDetail(), request);
+        }
         log.error("Error no manejado en {}: {}", request.getRequestURI(), ex.getMessage(), ex);
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Error interno del servidor", request);
