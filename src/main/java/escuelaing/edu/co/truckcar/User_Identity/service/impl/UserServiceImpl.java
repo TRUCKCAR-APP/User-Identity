@@ -6,6 +6,7 @@ import escuelaing.edu.co.truckcar.User_Identity.dto.request.UpdateProfileRequest
 import escuelaing.edu.co.truckcar.User_Identity.dto.response.UserResponse;
 import escuelaing.edu.co.truckcar.User_Identity.event.DomainEventPublisher;
 import escuelaing.edu.co.truckcar.User_Identity.event.UserRoleChangedEvent;
+import escuelaing.edu.co.truckcar.User_Identity.event.UserStatusChangedEvent;
 import escuelaing.edu.co.truckcar.User_Identity.exception.ResourceNotFoundException;
 import escuelaing.edu.co.truckcar.User_Identity.mapper.UserMapper;
 import escuelaing.edu.co.truckcar.User_Identity.model.Role;
@@ -75,11 +76,22 @@ public class UserServiceImpl implements UserService {
         if (request.getStatus() == UserStatus.SUSPENDED) {
             requireAnotherActiveAdmin(user);
         }
+        UserStatus previous = user.getStatus();
         user.setStatus(request.getStatus());
         User saved = userRepository.save(user);
         if (saved.getStatus() == UserStatus.SUSPENDED) {
             // Sin refresh tokens la sesión termina al vencer el access token (15 min).
             refreshTokenRepository.revokeAllByUserId(saved.getId());
+        }
+        if (previous != saved.getStatus()) {
+            // Verificar (ACTIVE) o suspender cambia si el conductor puede recibir cargas: fleets-drivers lo escucha.
+            eventPublisher.publish(new UserStatusChangedEvent(
+                    saved.getId(),
+                    saved.getRole().name(),
+                    previous == null ? null : previous.name(),
+                    saved.getStatus().name(),
+                    Instant.now().toEpochMilli()
+            ));
         }
         return userMapper.toResponse(saved);
     }
