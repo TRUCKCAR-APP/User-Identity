@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
 /**
@@ -82,7 +83,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex,
                                                               HttpServletRequest request) {
         log.debug("Cuerpo ilegible en {}: {}", request.getRequestURI(), ex.getMessage());
-        // Sin el detalle del parser en la respuesta: puede incluir fragmentos del cuerpo (una contraseña) y clases internas.
         return buildResponse(HttpStatus.BAD_REQUEST,
                 "El cuerpo debe ser JSON válido en UTF-8 con los campos y valores esperados", request);
     }
@@ -96,8 +96,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex,
                                                         HttpServletRequest request) {
-        // Excepciones de Spring MVC con su propio estado (405, 415, parámetro faltante...): este handler genérico las
-        // capturaría antes que el resolver por defecto y las convertiría en 500.
         if (ex instanceof org.springframework.web.ErrorResponse errorResponse
                 && errorResponse.getStatusCode().is4xxClientError()) {
             return buildResponse(HttpStatus.valueOf(errorResponse.getStatusCode().value()),
@@ -118,5 +116,16 @@ public class GlobalExceptionHandler {
                 .path(request.getRequestURI())
                 .build();
         return ResponseEntity.status(status).body(error);
+    }
+
+    @ExceptionHandler(AccountPendingVerificationException.class)
+    public ResponseEntity<ErrorResponse> handlePendingVerification(AccountPendingVerificationException ex) {
+        ErrorResponse error = ErrorResponse.builder()
+                .status(HttpStatus.FORBIDDEN.value())
+                .error("ACCOUNT_PENDING_VERIFICATION")
+                .message(ex.getMessage())
+                .timestamp(Instant.now())
+                .build();
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
     }
 }

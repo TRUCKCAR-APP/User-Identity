@@ -1,10 +1,21 @@
 package escuelaing.edu.co.truckcar.User_Identity.model;
 
-/**
- * Estados posibles de una cuenta de usuario.
- */
 public enum UserStatus {
+    PENDING_VERIFICATION,
     ACTIVE,
-    SUSPENDED,
-    PENDING_VERIFICATION
+    SUSPENDED;
+
+    /**
+     * Valida si la transición de estado solicitada está permitida por las reglas de negocio.
+     */
+    public boolean canTransitionTo(UserStatus target) {
+        if (this == target) {
+            return true;
+        }
+        return switch (this) {
+            case PENDING_VERIFICATION -> target == ACTIVE || target == SUSPENDED;
+            case ACTIVE -> target == SUSPENDED;
+            case SUSPENDED -> target == ACTIVE;
+        };
+    }
 }

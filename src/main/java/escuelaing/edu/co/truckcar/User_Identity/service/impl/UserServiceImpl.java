@@ -22,9 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Implementación de {@link UserService} — consulta y gestión de perfiles de usuario.
- */
 @Service
 @Transactional(readOnly = true)
 public class UserServiceImpl implements UserService {
@@ -35,9 +32,9 @@ public class UserServiceImpl implements UserService {
     private final DomainEventPublisher eventPublisher;
 
     public UserServiceImpl(UserRepository userRepository,
-                            RefreshTokenRepository refreshTokenRepository,
-                            UserMapper userMapper,
-                            DomainEventPublisher eventPublisher) {
+                           RefreshTokenRepository refreshTokenRepository,
+                           UserMapper userMapper,
+                           DomainEventPublisher eventPublisher) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.userMapper = userMapper;
@@ -72,13 +69,24 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse changeStatus(UUID id, ChangeStatusRequest request) {
         User user = findUserOrThrow(id);
-        if (request.getStatus() == UserStatus.SUSPENDED) {
+
+        UserStatus currentStatus = user.getStatus();
+        UserStatus targetStatus = request.getStatus();
+
+        if (!currentStatus.canTransitionTo(targetStatus)) {
+            throw new IllegalArgumentException(
+                    String.format("Transición de estado inválida: de %s a %s", currentStatus, targetStatus)
+            );
+        }
+
+        if (targetStatus == UserStatus.SUSPENDED) {
             requireAnotherActiveAdmin(user);
         }
-        user.setStatus(request.getStatus());
+
+        user.setStatus(targetStatus);
         User saved = userRepository.save(user);
+
         if (saved.getStatus() == UserStatus.SUSPENDED) {
-            // Sin refresh tokens la sesión termina al vencer el access token (15 min).
             refreshTokenRepository.revokeAllByUserId(saved.getId());
         }
         return userMapper.toResponse(saved);
@@ -97,11 +105,9 @@ public class UserServiceImpl implements UserService {
         String oldRole = user.getRole().name();
         user.setRole(request.getRole());
         User saved = userRepository.save(user);
-        // El rol viaja en el JWT: se revocan los refresh tokens para que el rol anterior deje de valer en 15 min y
-        // la próxima sesión ya lleve el nuevo.
+
         refreshTokenRepository.revokeAllByUserId(saved.getId());
 
-        // Publicar evento de cambio de rol
         eventPublisher.publish(new UserRoleChangedEvent(
                 saved.getId(),
                 oldRole,
@@ -112,7 +118,6 @@ public class UserServiceImpl implements UserService {
         return userMapper.toResponse(saved);
     }
 
-    /** Quitar el rol o suspender al único ADMIN activo dejaría la plataforma sin administración. */
     private void requireAnotherActiveAdmin(User user) {
         if (user.getRole() == Role.ADMIN && user.getStatus() == UserStatus.ACTIVE
                 && userRepository.countByRoleAndStatus(Role.ADMIN, UserStatus.ACTIVE) <= 1) {

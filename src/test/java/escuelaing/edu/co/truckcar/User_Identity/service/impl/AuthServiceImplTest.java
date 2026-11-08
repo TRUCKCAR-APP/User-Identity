@@ -5,6 +5,8 @@ import escuelaing.edu.co.truckcar.User_Identity.dto.request.RefreshTokenRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.request.RegisterRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.response.AuthResponse;
 import escuelaing.edu.co.truckcar.User_Identity.event.DomainEventPublisher;
+import escuelaing.edu.co.truckcar.User_Identity.event.UserRegisteredEvent;
+import escuelaing.edu.co.truckcar.User_Identity.exception.AccountPendingVerificationException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.AccountSuspendedException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.DuplicateResourceException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.InvalidTokenException;
@@ -72,7 +74,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    @DisplayName("register() — registro exitoso devuelve tokens")
+    @DisplayName("register() — registro exitoso no devuelve tokens y queda en PENDING_VERIFICATION")
     void register_success() {
         RegisterRequest request = RegisterRequest.builder()
                 .email("juan@truckcar.co")
@@ -83,22 +85,14 @@ class AuthServiceImplTest {
                 .build();
 
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
-        when(userMapper.toEntity(any(RegisterRequest.class))).thenReturn(sampleUser);
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$hashedvalue");
         when(userRepository.save(any(User.class))).thenReturn(sampleUser);
-        when(jwtProvider.generateAccessToken(any(), anyString(), anyString()))
-                .thenReturn("access-token");
-        when(jwtProvider.generateRefreshToken()).thenReturn("refresh-token");
-        when(jwtProvider.getAccessTokenExpirationMs()).thenReturn(900000L);
-        when(jwtProvider.getRefreshTokenExpirationMs()).thenReturn(604800000L);
-        when(refreshTokenRepository.save(any())).thenReturn(RefreshToken.builder().build());
 
         AuthResponse response = authService.register(request);
 
-        assertThat(response.getAccessToken()).isEqualTo("access-token");
-        assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
-        assertThat(response.getTokenType()).isEqualTo("Bearer");
-        verify(eventPublisher).publish(any(escuelaing.edu.co.truckcar.User_Identity.event.UserRegisteredEvent.class));
+        assertThat(response.getAccessToken()).isNull();
+        assertThat(response.getRefreshToken()).isNull();
+        verify(eventPublisher).publish(any(UserRegisteredEvent.class));
     }
 
     @ParameterizedTest(name = "register() — el registro público acepta el rol {0}")
@@ -114,18 +108,13 @@ class AuthServiceImplTest {
         sampleUser.setRole(role);
 
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
-        when(userMapper.toEntity(any(RegisterRequest.class))).thenReturn(sampleUser);
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$hashedvalue");
         when(userRepository.save(any(User.class))).thenReturn(sampleUser);
-        when(jwtProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("access-token");
-        when(jwtProvider.generateRefreshToken()).thenReturn("refresh-token");
-        when(jwtProvider.getAccessTokenExpirationMs()).thenReturn(900000L);
-        when(jwtProvider.getRefreshTokenExpirationMs()).thenReturn(604800000L);
-        when(refreshTokenRepository.save(any())).thenReturn(RefreshToken.builder().build());
 
-        assertThat(authService.register(request).getAccessToken()).isEqualTo("access-token");
-        // El token lleva el rol registrado: el gateway lo propaga en X-Auth-Role.
-        verify(jwtProvider).generateAccessToken(any(), anyString(), org.mockito.ArgumentMatchers.eq(role.name()));
+        AuthResponse response = authService.register(request);
+
+        assertThat(response.getAccessToken()).isNull();
+        verify(eventPublisher).publish(any(UserRegisteredEvent.class));
     }
 
     @Test
@@ -157,29 +146,29 @@ class AuthServiceImplTest {
                 .role(role)
                 .build();
 
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+
         assertThatThrownBy(() -> authService.register(request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining(role.name());
-        verify(userRepository, org.mockito.Mockito.never()).save(any(User.class));
-        verify(eventPublisher, org.mockito.Mockito.never())
-                .publish(any(escuelaing.edu.co.truckcar.User_Identity.event.UserRegisteredEvent.class));
+                .hasMessageContaining("Rol no permitido");
+
+        verify(userRepository, never()).save(any(User.class));
+        verify(eventPublisher, never()).publish(any(UserRegisteredEvent.class));
     }
 
     @Test
-    @DisplayName("login() — credenciales válidas devuelve tokens")
+    @DisplayName("login() — credenciales válidas y cuenta ACTIVE devuelve tokens")
     void login_success() {
+        sampleUser.setStatus(UserStatus.ACTIVE); // El usuario DEBE estar activo para loguearse
+
         LoginRequest request = LoginRequest.builder()
                 .email("juan@truckcar.co")
                 .password("Segura123!")
                 .build();
 
-        when(userRepository.findByEmail("juan@truckcar.co"))
-                .thenReturn(Optional.of(sampleUser));
-        when(passwordEncoder.matches("Segura123!", sampleUser.getPasswordHash()))
-                .thenReturn(true);
-        when(userRepository.save(any(User.class))).thenReturn(sampleUser);
-        when(jwtProvider.generateAccessToken(any(), anyString(), anyString()))
-                .thenReturn("access-token");
+        when(userRepository.findByEmail("juan@truckcar.co")).thenReturn(Optional.of(sampleUser));
+        when(passwordEncoder.matches("Segura123!", sampleUser.getPasswordHash())).thenReturn(true);
+        when(jwtProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("access-token");
         when(jwtProvider.generateRefreshToken()).thenReturn("refresh-token");
         when(jwtProvider.getAccessTokenExpirationMs()).thenReturn(900000L);
         when(jwtProvider.getRefreshTokenExpirationMs()).thenReturn(604800000L);
@@ -192,6 +181,23 @@ class AuthServiceImplTest {
     }
 
     @Test
+    @DisplayName("login() — cuenta PENDING_VERIFICATION lanza AccountPendingVerificationException")
+    void login_pendingVerification_fails() {
+        // sampleUser está PENDING_VERIFICATION por defecto desde el setUp
+        LoginRequest request = LoginRequest.builder()
+                .email("juan@truckcar.co")
+                .password("Segura123!")
+                .build();
+
+        when(userRepository.findByEmail("juan@truckcar.co")).thenReturn(Optional.of(sampleUser));
+        when(passwordEncoder.matches("Segura123!", sampleUser.getPasswordHash())).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(AccountPendingVerificationException.class)
+                .hasMessageContaining("revisión");
+    }
+
+    @Test
     @DisplayName("login() — contraseña incorrecta lanza BadCredentialsException")
     void login_wrongPassword() {
         LoginRequest request = LoginRequest.builder()
@@ -199,10 +205,8 @@ class AuthServiceImplTest {
                 .password("WrongPass!")
                 .build();
 
-        when(userRepository.findByEmail("juan@truckcar.co"))
-                .thenReturn(Optional.of(sampleUser));
-        when(passwordEncoder.matches("WrongPass!", sampleUser.getPasswordHash()))
-                .thenReturn(false);
+        when(userRepository.findByEmail("juan@truckcar.co")).thenReturn(Optional.of(sampleUser));
+        when(passwordEncoder.matches("WrongPass!", sampleUser.getPasswordHash())).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(BadCredentialsException.class);
@@ -245,7 +249,9 @@ class AuthServiceImplTest {
     @Test
     @DisplayName("refresh() — rota el token: revoca el usado y emite un par nuevo")
     void refresh_rotatesToken() {
+        sampleUser.setStatus(UserStatus.ACTIVE);
         RefreshToken stored = activeRefreshToken();
+
         when(refreshTokenRepository.findByTokenAndRevokedFalse("old-refresh")).thenReturn(Optional.of(stored));
         when(userRepository.findById(sampleUser.getId())).thenReturn(Optional.of(sampleUser));
         when(refreshTokenRepository.revokeIfActive(stored.getId())).thenReturn(1);
@@ -264,7 +270,9 @@ class AuthServiceImplTest {
     @Test
     @DisplayName("refresh() — el mismo token usado dos veces a la vez solo emite un par")
     void refresh_concurrentReuseIsRejected() {
+        sampleUser.setStatus(UserStatus.ACTIVE);
         RefreshToken stored = activeRefreshToken();
+
         when(refreshTokenRepository.findByTokenAndRevokedFalse("old-refresh")).thenReturn(Optional.of(stored));
         when(userRepository.findById(sampleUser.getId())).thenReturn(Optional.of(sampleUser));
         // Otra petición ya lo revocó entre la lectura y el UPDATE.

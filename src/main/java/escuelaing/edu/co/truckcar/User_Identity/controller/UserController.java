@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -26,9 +27,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/**
- * Endpoints de gestión de usuarios — perfil propio y operaciones de administración.
- */
 @RestController
 @RequestMapping("/api/v1/users")
 @Tag(name = "Usuarios", description = "Consulta y gestión de perfiles de usuario")
@@ -56,12 +54,14 @@ public class UserController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Consultar usuario por ID (ADMIN, COORDINADOR)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<UserResponse> getUserById(@PathVariable UUID id) {
         return ResponseEntity.ok(userService.getUserById(id));
     }
 
     @GetMapping
     @Operation(summary = "Listado paginado de usuarios con filtros (ADMIN)")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<UserResponse>> listUsers(
             @RequestParam(required = false) Role role,
             @RequestParam(required = false) UserStatus status,
@@ -71,6 +71,7 @@ public class UserController {
 
     @PatchMapping("/{id}/status")
     @Operation(summary = "Suspender o reactivar un usuario (ADMIN)")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UserResponse> changeStatus(
             @PathVariable UUID id,
             @Valid @RequestBody ChangeStatusRequest request) {
@@ -79,6 +80,7 @@ public class UserController {
 
     @PatchMapping("/{id}/role")
     @Operation(summary = "Cambiar el rol de un usuario (ADMIN)")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UserResponse> changeRole(
             @PathVariable UUID id,
             @Valid @RequestBody ChangeRoleRequest request) {
