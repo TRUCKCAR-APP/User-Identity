@@ -55,13 +55,12 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            // Formato exacto exigido por el test register_duplicateEmail
             throw new DuplicateResourceException("El correo ya se encuentra registrado: " + request.getEmail());
         }
 
         Role assignedRole = request.getRole() != null ? request.getRole() : Role.CONDUCTOR;
         if (!SELF_REGISTRABLE_ROLES.contains(assignedRole)) {
-            // Excepción exacta exigida por el test register_privilegedRolesAreRejected
+            // COORDINADOR y ADMIN solo los asigna un ADMIN con PATCH /api/v1/users/{id}/role.
             throw new IllegalArgumentException("Rol no permitido");
         }
 
@@ -84,8 +83,10 @@ public class AuthServiceImpl implements AuthService {
                 Instant.now().toEpochMilli()
         ));
 
-        // Regla de negocio: NO se devuelve token hasta ser aprobado
-        return AuthResponse.builder().build();
+        // La cuenta nace PENDING_VERIFICATION y recibe sesión: el conductor entra, ve que su cuenta está pendiente y
+        // registra su vehículo mientras un administrador la verifica. Lo que una cuenta pendiente no puede hacer lo
+        // limitan los servicios: ai-fleet-allocation no le asigna cargas hasta que user.status.changed la marca ACTIVE.
+        return generateAuthResponse(savedUser);
     }
 
     @Override
@@ -95,16 +96,14 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            // Excepción exacta exigida por el test login_wrongPassword
             throw new BadCredentialsException("Credenciales inválidas");
         }
 
-        if (user.getStatus() == UserStatus.PENDING_VERIFICATION) {
-            throw new AccountPendingVerificationException("Su cuenta está en revisión. No puede iniciar sesión hasta ser aprobada por un administrador.");
-        }
-        if (user.getStatus() == UserStatus.SUSPENDED) {
-            throw new AccountSuspendedException("La cuenta se encuentra suspendida.");
-        }
+        // La contraseña se comprueba antes que el estado: solo quien la conoce sabe si la cuenta está suspendida.
+        // Una cuenta PENDING_VERIFICATION sí inicia sesión (ver register).
+        requireNotSuspended(user);
+        user.setLastLoginAt(Instant.now());
+        userRepository.save(user);
 
         return generateAuthResponse(user);
     }

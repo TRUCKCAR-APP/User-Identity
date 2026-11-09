@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
 /**
@@ -116,16 +115,5 @@ public class GlobalExceptionHandler {
                 .path(request.getRequestURI())
                 .build();
         return ResponseEntity.status(status).body(error);
-    }
-
-    @ExceptionHandler(AccountPendingVerificationException.class)
-    public ResponseEntity<ErrorResponse> handlePendingVerification(AccountPendingVerificationException ex) {
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.FORBIDDEN.value())
-                .error("ACCOUNT_PENDING_VERIFICATION")
-                .message(ex.getMessage())
-                .timestamp(Instant.now())
-                .build();
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
     }
 }

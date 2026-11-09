@@ -23,7 +23,9 @@ class UserIdentityApplicationTests {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        // Mismo esquema que en producción: Flyway crea las tablas en user_identity (application.yml).
+        registry.add("spring.datasource.url", () -> postgres.getJdbcUrl()
+                + (postgres.getJdbcUrl().contains("?") ? "&" : "?") + "currentSchema=user_identity,public");
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
     }
