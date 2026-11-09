@@ -6,7 +6,6 @@ import escuelaing.edu.co.truckcar.User_Identity.dto.request.RegisterRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.response.AuthResponse;
 import escuelaing.edu.co.truckcar.User_Identity.event.DomainEventPublisher;
 import escuelaing.edu.co.truckcar.User_Identity.event.UserRegisteredEvent;
-import escuelaing.edu.co.truckcar.User_Identity.exception.AccountPendingVerificationException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.AccountSuspendedException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.DuplicateResourceException;
 import escuelaing.edu.co.truckcar.User_Identity.exception.InvalidTokenException;
@@ -39,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,8 +73,17 @@ class AuthServiceImplTest {
                 .build();
     }
 
+    /** Lo que generateAuthResponse necesita para emitir el par de tokens. */
+    private void tokensIssued() {
+        when(jwtProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("access-token");
+        when(jwtProvider.generateRefreshToken()).thenReturn("refresh-token");
+        when(jwtProvider.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtProvider.getRefreshTokenExpirationMs()).thenReturn(604800000L);
+        when(refreshTokenRepository.save(any())).thenReturn(RefreshToken.builder().build());
+    }
+
     @Test
-    @DisplayName("register() — registro exitoso no devuelve tokens y queda en PENDING_VERIFICATION")
+    @DisplayName("register() — la cuenta queda PENDING_VERIFICATION y recibe sesión (el conductor entra a registrar su vehículo)")
     void register_success() {
         RegisterRequest request = RegisterRequest.builder()
                 .email("juan@truckcar.co")
@@ -87,11 +96,16 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$hashedvalue");
         when(userRepository.save(any(User.class))).thenReturn(sampleUser);
+        tokensIssued();
 
         AuthResponse response = authService.register(request);
 
-        assertThat(response.getAccessToken()).isNull();
-        assertThat(response.getRefreshToken()).isNull();
+        assertThat(response.getAccessToken()).isEqualTo("access-token");
+        assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
+        assertThat(response.getTokenType()).isEqualTo("Bearer");
+        org.mockito.ArgumentCaptor<User> saved = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getStatus()).isEqualTo(UserStatus.PENDING_VERIFICATION);
         verify(eventPublisher).publish(any(UserRegisteredEvent.class));
     }
 
@@ -110,10 +124,11 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$hashedvalue");
         when(userRepository.save(any(User.class))).thenReturn(sampleUser);
+        tokensIssued();
 
         AuthResponse response = authService.register(request);
 
-        assertThat(response.getAccessToken()).isNull();
+        assertThat(response.getAccessToken()).isNotBlank();
         verify(eventPublisher).publish(any(UserRegisteredEvent.class));
     }
 
@@ -159,7 +174,7 @@ class AuthServiceImplTest {
     @Test
     @DisplayName("login() — credenciales válidas y cuenta ACTIVE devuelve tokens")
     void login_success() {
-        sampleUser.setStatus(UserStatus.ACTIVE); // El usuario DEBE estar activo para loguearse
+        sampleUser.setStatus(UserStatus.ACTIVE);
 
         LoginRequest request = LoginRequest.builder()
                 .email("juan@truckcar.co")
@@ -178,23 +193,24 @@ class AuthServiceImplTest {
 
         assertThat(response.getAccessToken()).isNotBlank();
         assertThat(response.getTokenType()).isEqualTo("Bearer");
+        assertThat(sampleUser.getLastLoginAt()).as("el login registra la fecha del último acceso").isNotNull();
+        verify(userRepository).save(sampleUser);
     }
 
     @Test
-    @DisplayName("login() — cuenta PENDING_VERIFICATION lanza AccountPendingVerificationException")
-    void login_pendingVerification_fails() {
-        // sampleUser está PENDING_VERIFICATION por defecto desde el setUp
-        LoginRequest request = LoginRequest.builder()
-                .email("juan@truckcar.co")
-                .password("Segura123!")
-                .build();
-
+    @DisplayName("login() — una cuenta PENDING_VERIFICATION inicia sesión (sus límites los ponen los servicios)")
+    void login_pendingAccountGetsTokens() {
+        // sampleUser está PENDING_VERIFICATION desde el setUp
         when(userRepository.findByEmail("juan@truckcar.co")).thenReturn(Optional.of(sampleUser));
         when(passwordEncoder.matches("Segura123!", sampleUser.getPasswordHash())).thenReturn(true);
+        tokensIssued();
 
-        assertThatThrownBy(() -> authService.login(request))
-                .isInstanceOf(AccountPendingVerificationException.class)
-                .hasMessageContaining("revisión");
+        AuthResponse response = authService.login(LoginRequest.builder()
+                .email("juan@truckcar.co").password("Segura123!").build());
+
+        assertThat(response.getAccessToken()).isEqualTo("access-token");
+        assertThat(sampleUser.getStatus()).isEqualTo(UserStatus.PENDING_VERIFICATION);
+        verify(userRepository, times(1)).save(sampleUser);
     }
 
     @Test
