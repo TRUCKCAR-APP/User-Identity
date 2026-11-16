@@ -2,6 +2,7 @@ package escuelaing.edu.co.truckcar.User_Identity.service.impl;
 
 import escuelaing.edu.co.truckcar.User_Identity.dto.request.LoginRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.request.RefreshTokenRequest;
+import escuelaing.edu.co.truckcar.User_Identity.security.RefreshTokenHasher;
 import escuelaing.edu.co.truckcar.User_Identity.dto.request.RegisterRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.response.AuthResponse;
 import escuelaing.edu.co.truckcar.User_Identity.event.DomainEventPublisher;
@@ -240,7 +241,7 @@ class AuthServiceImplTest {
                 .isInstanceOf(AccountSuspendedException.class);
 
         RefreshToken stored = activeRefreshToken();
-        when(refreshTokenRepository.findByTokenAndRevokedFalse("old-refresh")).thenReturn(Optional.of(stored));
+        when(refreshTokenRepository.findByTokenAndRevokedFalse(RefreshTokenHasher.hash("old-refresh"))).thenReturn(Optional.of(stored));
         when(userRepository.findById(sampleUser.getId())).thenReturn(Optional.of(sampleUser));
 
         assertThatThrownBy(() -> authService.refresh(RefreshTokenRequest.builder().refreshToken("old-refresh").build()))
@@ -255,7 +256,7 @@ class AuthServiceImplTest {
                 .refreshToken("invalid-token")
                 .build();
 
-        when(refreshTokenRepository.findByTokenAndRevokedFalse("invalid-token"))
+        when(refreshTokenRepository.findByTokenAndRevokedFalse(RefreshTokenHasher.hash("invalid-token")))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.refresh(request))
@@ -268,7 +269,7 @@ class AuthServiceImplTest {
         sampleUser.setStatus(UserStatus.ACTIVE);
         RefreshToken stored = activeRefreshToken();
 
-        when(refreshTokenRepository.findByTokenAndRevokedFalse("old-refresh")).thenReturn(Optional.of(stored));
+        when(refreshTokenRepository.findByTokenAndRevokedFalse(RefreshTokenHasher.hash("old-refresh"))).thenReturn(Optional.of(stored));
         when(userRepository.findById(sampleUser.getId())).thenReturn(Optional.of(sampleUser));
         when(refreshTokenRepository.revokeIfActive(stored.getId())).thenReturn(1);
         when(jwtProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("access-token");
@@ -289,7 +290,7 @@ class AuthServiceImplTest {
         sampleUser.setStatus(UserStatus.ACTIVE);
         RefreshToken stored = activeRefreshToken();
 
-        when(refreshTokenRepository.findByTokenAndRevokedFalse("old-refresh")).thenReturn(Optional.of(stored));
+        when(refreshTokenRepository.findByTokenAndRevokedFalse(RefreshTokenHasher.hash("old-refresh"))).thenReturn(Optional.of(stored));
         when(userRepository.findById(sampleUser.getId())).thenReturn(Optional.of(sampleUser));
         // Otra petición ya lo revocó entre la lectura y el UPDATE.
         when(refreshTokenRepository.revokeIfActive(stored.getId())).thenReturn(0);
@@ -297,6 +298,36 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> authService.refresh(RefreshTokenRequest.builder().refreshToken("old-refresh").build()))
                 .isInstanceOf(InvalidTokenException.class);
         verify(jwtProvider, never()).generateRefreshToken();
+    }
+
+    @Test
+    @DisplayName("refresh() — en la base queda el SHA-256 del token nuevo, nunca el token en claro")
+    void refresh_storesOnlyTheHash() {
+        sampleUser.setStatus(UserStatus.ACTIVE);
+        RefreshToken stored = activeRefreshToken();
+        when(refreshTokenRepository.findByTokenAndRevokedFalse(RefreshTokenHasher.hash("old-refresh"))).thenReturn(Optional.of(stored));
+        when(userRepository.findById(sampleUser.getId())).thenReturn(Optional.of(sampleUser));
+        when(refreshTokenRepository.revokeIfActive(stored.getId())).thenReturn(1);
+        when(jwtProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("access-token");
+        when(jwtProvider.generateRefreshToken()).thenReturn("new-refresh");
+        when(jwtProvider.getRefreshTokenExpirationMs()).thenReturn(604800000L);
+        org.mockito.ArgumentCaptor<RefreshToken> saved = org.mockito.ArgumentCaptor.forClass(RefreshToken.class);
+        when(refreshTokenRepository.save(saved.capture())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthResponse response = authService.refresh(RefreshTokenRequest.builder().refreshToken("old-refresh").build());
+
+        assertThat(response.getRefreshToken()).isEqualTo("new-refresh");
+        assertThat(saved.getValue().getToken())
+                .isEqualTo(RefreshTokenHasher.hash("new-refresh"))
+                .doesNotContain("new-refresh")
+                .matches("[0-9a-f]{64}");
+    }
+
+    @Test
+    @DisplayName("RefreshTokenHasher — SHA-256 conocido (vector de prueba de NIST para \"abc\")")
+    void hasher_matchesTheStandardVector() {
+        assertThat(RefreshTokenHasher.hash("abc"))
+                .isEqualTo("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     }
 
     private RefreshToken activeRefreshToken() {

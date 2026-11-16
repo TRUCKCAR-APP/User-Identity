@@ -36,6 +36,7 @@ public class RefreshToken {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    /** SHA-256 en hexadecimal del token entregado al cliente (RefreshTokenHasher), nunca el token en claro. */
     @Column(name = "token", nullable = false, unique = true)
     private String token;
 
