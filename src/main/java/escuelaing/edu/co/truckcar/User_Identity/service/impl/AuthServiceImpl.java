@@ -13,6 +13,7 @@ import escuelaing.edu.co.truckcar.User_Identity.model.Role;
 import escuelaing.edu.co.truckcar.User_Identity.model.User;
 import escuelaing.edu.co.truckcar.User_Identity.model.UserStatus;
 import escuelaing.edu.co.truckcar.User_Identity.repository.RefreshTokenRepository;
+import escuelaing.edu.co.truckcar.User_Identity.security.RefreshTokenHasher;
 import escuelaing.edu.co.truckcar.User_Identity.repository.UserRepository;
 import escuelaing.edu.co.truckcar.User_Identity.security.JwtProvider;
 import escuelaing.edu.co.truckcar.User_Identity.service.AuthService;
@@ -112,7 +113,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(noRollbackFor = InvalidTokenException.class)
     public AuthResponse refresh(RefreshTokenRequest request) {
         RefreshToken storedToken = refreshTokenRepository
-                .findByTokenAndRevokedFalse(request.getRefreshToken())
+                .findByTokenAndRevokedFalse(RefreshTokenHasher.hash(request.getRefreshToken()))
                 .orElseThrow(() -> new InvalidTokenException("Refresh token inválido o revocado"));
 
         if (storedToken.getExpiresAt().isBefore(Instant.now())) {
@@ -154,7 +155,7 @@ public class AuthServiceImpl implements AuthService {
 
         RefreshToken refreshTokenEntity = RefreshToken.builder()
                 .userId(user.getId())
-                .token(rawRefreshToken)
+                .token(RefreshTokenHasher.hash(rawRefreshToken))
                 .expiresAt(Instant.now().plusMillis(jwtProvider.getRefreshTokenExpirationMs()))
                 .build();
         refreshTokenRepository.save(refreshTokenEntity);
