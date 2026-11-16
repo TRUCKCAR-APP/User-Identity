@@ -1,10 +1,11 @@
 package escuelaing.edu.co.truckcar.User_Identity.exception;
 
-import escuelaing.edu.co.truckcar.User_Identity.dto.response.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -15,11 +16,12 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-import java.time.Instant;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
- * Manejo centralizado de excepciones — garantiza formato de error consistente en toda la API.
+ * Manejo centralizado de excepciones en formato RFC 7807 (ver {@link Problems}): type, title, status, detail e
+ * instance, más los campos de antes (error, message, path, timestamp) y errors[]/details en los 400 de validación.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -27,93 +29,85 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex,
-                                                         HttpServletRequest request) {
-        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    public ResponseEntity<ProblemDetail> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
+        return respond(request, HttpStatus.NOT_FOUND, "not-found", "Recurso no encontrado", ex.getMessage());
     }
 
     @ExceptionHandler(DuplicateResourceException.class)
-    public ResponseEntity<ErrorResponse> handleDuplicate(DuplicateResourceException ex,
-                                                          HttpServletRequest request) {
-        return buildResponse(HttpStatus.CONFLICT, ex.getMessage(), request);
+    public ResponseEntity<ProblemDetail> handleDuplicate(DuplicateResourceException ex, HttpServletRequest request) {
+        return respond(request, HttpStatus.CONFLICT, "duplicate-resource", "Recurso duplicado", ex.getMessage());
     }
 
     @ExceptionHandler(InvalidTokenException.class)
-    public ResponseEntity<ErrorResponse> handleInvalidToken(InvalidTokenException ex,
-                                                             HttpServletRequest request) {
-        return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
+    public ResponseEntity<ProblemDetail> handleInvalidToken(InvalidTokenException ex, HttpServletRequest request) {
+        return respond(request, HttpStatus.UNAUTHORIZED, "invalid-token", "Token inválido", ex.getMessage());
     }
 
     @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex,
-                                                               HttpServletRequest request) {
-        return buildResponse(HttpStatus.UNAUTHORIZED, "Credenciales inválidas", request);
+    public ResponseEntity<ProblemDetail> handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
+        return respond(request, HttpStatus.UNAUTHORIZED, "invalid-credentials", "Credenciales inválidas",
+                "Credenciales inválidas");
     }
 
     @ExceptionHandler(AccountSuspendedException.class)
-    public ResponseEntity<ErrorResponse> handleSuspended(AccountSuspendedException ex,
-                                                          HttpServletRequest request) {
-        return buildResponse(HttpStatus.FORBIDDEN, ex.getMessage(), request);
+    public ResponseEntity<ProblemDetail> handleSuspended(AccountSuspendedException ex, HttpServletRequest request) {
+        return respond(request, HttpStatus.FORBIDDEN, "account-suspended", "Cuenta suspendida", ex.getMessage());
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex,
-                                                             HttpServletRequest request) {
-        return buildResponse(HttpStatus.FORBIDDEN, "Acceso denegado", request);
+    public ResponseEntity<ProblemDetail> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        return respond(request, HttpStatus.FORBIDDEN, "forbidden", "Acceso denegado", "Acceso denegado");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex,
-                                                           HttpServletRequest request) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(FieldError::getDefaultMessage)
-                .collect(Collectors.joining("; "));
-        return buildResponse(HttpStatus.BAD_REQUEST, message, request);
+    public ResponseEntity<ProblemDetail> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
+        Map<String, String> fieldErrors = new TreeMap<>();
+        for (FieldError fe : ex.getBindingResult().getFieldErrors()) {
+            fieldErrors.putIfAbsent(fe.getField(), fe.getDefaultMessage());
+        }
+        String detail = fieldErrors.isEmpty() ? "La solicitud tiene datos inválidos" : String.join("; ", fieldErrors.values());
+        ResponseEntity<ProblemDetail> response = respond(request, HttpStatus.BAD_REQUEST, "validation-error",
+                "Validación de datos fallida", detail);
+        response.getBody().setProperty("details", fieldErrors);
+        response.getBody().setProperty("errors", fieldErrors.entrySet().stream()
+                .map(e -> Map.of("field", e.getKey(), "message", e.getValue())).toList());
+        return response;
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex,
-                                                                HttpServletRequest request) {
-        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    public ResponseEntity<ProblemDetail> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        return respond(request, HttpStatus.BAD_REQUEST, "bad-request", "Solicitud inválida", ex.getMessage());
     }
 
     /** JSON mal formado, UTF-8 inválido o un valor que no corresponde al tipo (rol desconocido): error del cliente. */
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex,
-                                                              HttpServletRequest request) {
+    public ResponseEntity<ProblemDetail> handleUnreadableBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
         log.debug("Cuerpo ilegible en {}: {}", request.getRequestURI(), ex.getMessage());
-        return buildResponse(HttpStatus.BAD_REQUEST,
-                "El cuerpo debe ser JSON válido en UTF-8 con los campos y valores esperados", request);
+        return respond(request, HttpStatus.BAD_REQUEST, "unreadable-body", "Cuerpo de la solicitud inválido",
+                "El cuerpo debe ser JSON válido en UTF-8 con los campos y valores esperados");
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
-                                                            HttpServletRequest request) {
-        return buildResponse(HttpStatus.BAD_REQUEST, ex.getName() + ": valor con un tipo incorrecto", request);
+    public ResponseEntity<ProblemDetail> handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        return respond(request, HttpStatus.BAD_REQUEST, "invalid-parameter", "Parámetro inválido",
+                ex.getName() + ": valor con un tipo incorrecto");
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex,
-                                                        HttpServletRequest request) {
+    public ResponseEntity<ProblemDetail> handleGeneral(Exception ex, HttpServletRequest request) {
         if (ex instanceof org.springframework.web.ErrorResponse errorResponse
                 && errorResponse.getStatusCode().is4xxClientError()) {
-            return buildResponse(HttpStatus.valueOf(errorResponse.getStatusCode().value()),
-                    errorResponse.getBody().getDetail(), request);
+            return respond(request, errorResponse.getStatusCode(), "bad-request", "Solicitud inválida",
+                    errorResponse.getBody().getDetail());
         }
         log.error("Error no manejado en {}: {}", request.getRequestURI(), ex.getMessage(), ex);
-        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR,
-                "Error interno del servidor", request);
+        return respond(request, HttpStatus.INTERNAL_SERVER_ERROR, "internal-error", "Error interno",
+                "Error interno del servidor");
     }
 
-    private ResponseEntity<ErrorResponse> buildResponse(HttpStatus status, String message,
-                                                         HttpServletRequest request) {
-        ErrorResponse error = ErrorResponse.builder()
-                .timestamp(Instant.now())
-                .status(status.value())
-                .error(status.getReasonPhrase())
-                .message(message)
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(status).body(error);
+    private static ResponseEntity<ProblemDetail> respond(HttpServletRequest request, HttpStatusCode status, String type,
+                                                         String title, String detail) {
+        return ResponseEntity.status(status).contentType(Problems.negotiatedType(request))
+                .body(Problems.of(status, type, title, detail, request.getRequestURI()));
     }
 }
