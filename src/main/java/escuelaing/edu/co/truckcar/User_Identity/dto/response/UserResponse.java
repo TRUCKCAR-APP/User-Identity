@@ -37,4 +37,6 @@ public class UserResponse {
     private escuelaing.edu.co.truckcar.User_Identity.model.AffiliationStatus affiliationStatus;
     /** Si la afiliación le permite recibir cargas (la cuenta además debe estar ACTIVE). */
     private Boolean loadEligible;
+    /** Doble autenticación activa. */
+    private boolean twoFactorEnabled;
 }

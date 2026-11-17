@@ -51,6 +51,10 @@ public class SecurityConfig {
                     .accessDeniedHandler(accessDeniedHandler))
             .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
             .authorizeHttpRequests(auth -> auth
+                    // ── Doble autenticación: gestionarla exige una sesión completa (un token temporal 2FA_PENDING no
+                    //    autentica: falla la firma y no tiene rol). verify-login queda público con el resto de /auth. ──
+                    .requestMatchers(HttpMethod.POST, "/api/v1/auth/2fa/setup", "/api/v1/auth/2fa/verify-setup",
+                            "/api/v1/auth/2fa/disable").authenticated()
                     // ── Públicos ──
                     .requestMatchers("/api/v1/auth/**").permitAll()
                     // /actuator/prometheus: solo lo alcanza Prometheus en la red interna (el api-gateway no enruta /actuator/**).
