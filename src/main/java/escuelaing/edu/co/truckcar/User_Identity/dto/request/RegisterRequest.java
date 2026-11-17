@@ -41,4 +41,18 @@ public class RegisterRequest {
 
     @NotNull(message = "El rol es obligatorio")
     private Role role;
+
+    /** Solo CONDUCTOR: INDEPENDIENTE o EMPRESA. Si se omite, la cuenta conserva el comportamiento anterior. */
+    private escuelaing.edu.co.truckcar.User_Identity.model.DriverType driverType;
+
+    /** Solo CONDUCTOR de EMPRESA: transportadora a la que pide afiliarse (GET /api/v1/auth/companies). */
+    private java.util.UUID companyId;
+
+    /** Solo TRANSPORTADORA: razón social de la empresa. */
+    @Size(max = 150, message = "El nombre de la empresa admite hasta 150 caracteres")
+    private String companyName;
+
+    /** Solo TRANSPORTADORA: NIT de la empresa (se guardan solo los dígitos, sin el de verificación si va con guion). */
+    @Size(max = 20, message = "El NIT admite hasta 20 caracteres")
+    private String companyNit;
 }

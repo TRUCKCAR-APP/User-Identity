@@ -13,5 +13,7 @@ public enum Role {
     CONDUCTOR,
     COORDINADOR,
     GENERADOR,
+    /** Empresa transportadora: registra y gestiona a sus conductores afiliados. */
+    TRANSPORTADORA,
     ADMIN
 }

@@ -27,6 +27,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     long countByRoleAndStatus(Role role, UserStatus status);
 
+    /** Conductores afiliados o con solicitud a una transportadora, del más reciente al más antiguo. */
+    java.util.List<User> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
+
+    long countByCompanyIdAndAffiliationStatus(UUID companyId,
+                                              escuelaing.edu.co.truckcar.User_Identity.model.AffiliationStatus status);
+
     @Query("""
             SELECT u FROM User u
             WHERE (:role IS NULL OR u.role = :role)

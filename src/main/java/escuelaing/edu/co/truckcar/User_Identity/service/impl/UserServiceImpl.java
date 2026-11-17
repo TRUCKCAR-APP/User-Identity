@@ -14,6 +14,7 @@ import escuelaing.edu.co.truckcar.User_Identity.model.User;
 import escuelaing.edu.co.truckcar.User_Identity.model.UserStatus;
 import escuelaing.edu.co.truckcar.User_Identity.repository.RefreshTokenRepository;
 import escuelaing.edu.co.truckcar.User_Identity.repository.UserRepository;
+import escuelaing.edu.co.truckcar.User_Identity.service.CompanyService;
 import escuelaing.edu.co.truckcar.User_Identity.service.UserService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,20 +32,31 @@ public class UserServiceImpl implements UserService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserMapper userMapper;
     private final DomainEventPublisher eventPublisher;
+    private final CompanyService companyService;
 
     public UserServiceImpl(UserRepository userRepository,
                            RefreshTokenRepository refreshTokenRepository,
                            UserMapper userMapper,
-                           DomainEventPublisher eventPublisher) {
+                           DomainEventPublisher eventPublisher,
+                           CompanyService companyService) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.userMapper = userMapper;
         this.eventPublisher = eventPublisher;
+        this.companyService = companyService;
     }
 
     @Override
     public UserResponse getProfile(UUID userId) {
-        return userMapper.toResponse(findUserOrThrow(userId));
+        return withCompanyName(userMapper.toResponse(findUserOrThrow(userId)));
+    }
+
+    /** Solo consulta las empresas si el usuario tiene una. */
+    private UserResponse withCompanyName(UserResponse response) {
+        if (response != null && response.getCompanyId() != null) {
+            companyService.fillCompanyNames(java.util.List.of(response));
+        }
+        return response;
     }
 
     @Override
@@ -57,13 +69,17 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserResponse getUserById(UUID id) {
-        return userMapper.toResponse(findUserOrThrow(id));
+        return withCompanyName(userMapper.toResponse(findUserOrThrow(id)));
     }
 
     @Override
     public Page<UserResponse> listUsers(Role role, UserStatus status, Pageable pageable) {
-        return userRepository.findAllWithFilters(role, status, pageable)
+        Page<UserResponse> page = userRepository.findAllWithFilters(role, status, pageable)
                 .map(userMapper::toResponse);
+        if (page.getContent().stream().anyMatch(user -> user.getCompanyId() != null)) {
+            companyService.fillCompanyNames(page.getContent());
+        }
+        return page;
     }
 
     @Override

@@ -53,6 +53,7 @@ class AuthServiceImplTest {
     @Mock private JwtProvider jwtProvider;
     @Mock private UserMapper userMapper;
     @Mock private DomainEventPublisher eventPublisher;
+    @Mock private escuelaing.edu.co.truckcar.User_Identity.service.CompanyService companyService;
 
     @InjectMocks
     private AuthServiceImpl authService;

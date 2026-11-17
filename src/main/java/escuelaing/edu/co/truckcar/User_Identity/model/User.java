@@ -75,6 +75,31 @@ public class User {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    /** Solo conductores: INDEPENDIENTE o EMPRESA. Nulo en cuentas anteriores a la afiliación. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "driver_type", length = 20)
+    private DriverType driverType;
+
+    /** Transportadora del conductor de empresa (companies.id). */
+    @Column(name = "company_id")
+    private UUID companyId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "affiliation_status", length = 20)
+    private AffiliationStatus affiliationStatus;
+
+    /**
+     * Si el conductor puede recibir cargas según su afiliación (la verificación de la cuenta la exigen aparte los
+     * servicios de cargas). Independiente: no. De empresa: solo con la afiliación ACTIVA. Sin tipo (cuentas
+     * anteriores): sí, como antes.
+     */
+    public boolean affiliationAllowsLoads() {
+        if (driverType == null) {
+            return true;
+        }
+        return driverType == DriverType.EMPRESA && companyId != null && affiliationStatus == AffiliationStatus.ACTIVA;
+    }
+
     @PrePersist
     protected void onCreate() {
         var now = Instant.now();
