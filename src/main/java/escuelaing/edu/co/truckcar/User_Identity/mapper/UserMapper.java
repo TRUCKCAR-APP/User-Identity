@@ -29,6 +29,13 @@ public interface UserMapper {
     @Mapping(target = "driverType", ignore = true)
     @Mapping(target = "companyId", ignore = true)
     @Mapping(target = "affiliationStatus", ignore = true)
+    @Mapping(target = "twoFactorEnabled", ignore = true)
+    @Mapping(target = "twoFactorSecret", ignore = true)
+    @Mapping(target = "twoFactorPendingSecret", ignore = true)
+    @Mapping(target = "twoFactorBackupCodes", ignore = true)
+    @Mapping(target = "twoFactorLastStep", ignore = true)
+    @Mapping(target = "twoFactorFailedAttempts", ignore = true)
+    @Mapping(target = "twoFactorLockedUntil", ignore = true)
     User toEntity(RegisterRequest request);
 
     /**
@@ -53,6 +60,13 @@ public interface UserMapper {
     @Mapping(target = "driverType", ignore = true)
     @Mapping(target = "companyId", ignore = true)
     @Mapping(target = "affiliationStatus", ignore = true)
+    @Mapping(target = "twoFactorEnabled", ignore = true)
+    @Mapping(target = "twoFactorSecret", ignore = true)
+    @Mapping(target = "twoFactorPendingSecret", ignore = true)
+    @Mapping(target = "twoFactorBackupCodes", ignore = true)
+    @Mapping(target = "twoFactorLastStep", ignore = true)
+    @Mapping(target = "twoFactorFailedAttempts", ignore = true)
+    @Mapping(target = "twoFactorLockedUntil", ignore = true)
     void updateEntityFromRequest(escuelaing.edu.co.truckcar.User_Identity.dto.request.UpdateProfileRequest request,
                                   @MappingTarget User user);
 }

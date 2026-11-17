@@ -310,6 +310,35 @@ docker run -p 8080:8080 \
 | `PATCH` | `/api/v1/users/{id}/status` | Suspender/reactivar (ADMIN) |
 | `PATCH` | `/api/v1/users/{id}/role` | Cambiar rol (ADMIN) |
 
+### Doble autenticación (2FA con TOTP)
+
+Es opcional y cada usuario la activa desde su perfil. Las cuentas existentes la tienen desactivada (migración V5) y
+siguen iniciando sesión solo con correo y contraseña. Funciona con Google Authenticator, Authy o Microsoft
+Authenticator: TOTP (RFC 6238), HMAC-SHA1, 6 dígitos y pasos de 30 s. No usa SMS ni correo.
+
+| Método | Ruta | Quién | Descripción |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/2fa/setup` | sesión completa | Genera un secreto pendiente: `secret` (Base32), `otpauthUri` y `qrImage` (SVG en data URI). No activa el 2FA. Responde 409 si ya está activo |
+| `POST` | `/api/v1/auth/2fa/verify-setup` | sesión completa | `{"code": "123456"}` con el primer código de la app. Activa el 2FA y devuelve **una sola vez** 8 `backupCodes` (`XXXX-XXXX`) |
+| `POST` | `/api/v1/auth/2fa/disable` | sesión completa | `{"password": "…"}` o `{"code": "…"}` (TOTP o de respaldo). Desactiva el 2FA y cierra las demás sesiones |
+| `POST` | `/api/v1/auth/2fa/verify-login` | público (token temporal) | `{"tempToken": "…", "code": "…"}`. Con un código TOTP o de respaldo emite `accessToken` y `refreshToken` |
+
+**Login en dos pasos:**
+- Si el usuario tiene 2FA, `POST /api/v1/auth/login` no emite la sesión. Responde
+  `200 {"requiresTwoFactor": true, "tempToken": "…", "expiresIn": 300}`.
+- El `tempToken` dura 5 minutos, lleva `scope: 2FA_PENDING`, no lleva rol y se firma con una llave derivada del secreto JWT.
+- Por eso no autentica en ningún endpoint: el api-gateway, Notifications y este mismo servicio lo rechazan.
+
+**Seguridad:**
+- **Secretos cifrados:** el secreto TOTP se guarda cifrado con AES-256-GCM. La llave es `TRUCKCAR_TOTP_ENCRYPTION_KEY` o, si no se define, una derivada de `TRUCKCAR_JWT_SECRET`. Si cambia la llave, los usuarios con 2FA deben configurarlo de nuevo.
+- **Códigos de respaldo:** se guardan como SHA-256, igual que los refresh tokens, y cada uno sirve una vez.
+- **Tolerancia del reloj:** se acepta ±1 paso de 30 s.
+- **Sin repetición:** un código ya usado no se acepta otra vez (RFC 6238 §5.2).
+- **Bloqueo:** tras 5 códigos inválidos seguidos, el segundo paso queda bloqueado 15 minutos (429 `2fa-locked`). Se configura con `TRUCKCAR_2FA_MAX_FAILED_ATTEMPTS` y `TRUCKCAR_2FA_LOCKOUT_MS`. Además, el api-gateway aplica a `verify-login` el mismo límite de intentos que al login.
+- **Errores:** RFC 7807 con los tipos `invalid-2fa-code`, `invalid-2fa-token`, `2fa-locked`, `2fa-already-enabled`, `2fa-not-enabled`, `2fa-setup-missing` y `2fa-disable-denied`.
+
+`/users/me` incluye `twoFactorEnabled`.
+
 ### Empresas transportadoras y afiliación de conductores
 
 Un conductor es **independiente** o **de empresa**:

@@ -3,6 +3,7 @@ package escuelaing.edu.co.truckcar.User_Identity.service.impl;
 import escuelaing.edu.co.truckcar.User_Identity.dto.request.LoginRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.request.RefreshTokenRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.request.RegisterRequest;
+import escuelaing.edu.co.truckcar.User_Identity.dto.request.TwoFactorLoginRequest;
 import escuelaing.edu.co.truckcar.User_Identity.dto.response.AuthResponse;
 import escuelaing.edu.co.truckcar.User_Identity.dto.response.MessageResponse;
 import escuelaing.edu.co.truckcar.User_Identity.event.DomainEventPublisher;
@@ -41,13 +42,16 @@ public class AuthServiceImpl implements AuthService {
     private final JwtProvider jwtProvider;
     private final DomainEventPublisher eventPublisher;
     private final CompanyService companyService;
+    private final escuelaing.edu.co.truckcar.User_Identity.service.TwoFactorService twoFactorService;
 
     public AuthServiceImpl(UserRepository userRepository,
                            RefreshTokenRepository refreshTokenRepository,
                            PasswordEncoder passwordEncoder,
                            JwtProvider jwtProvider,
                            DomainEventPublisher eventPublisher,
-                           CompanyService companyService) {
+                           CompanyService companyService,
+                           escuelaing.edu.co.truckcar.User_Identity.service.TwoFactorService twoFactorService) {
+        this.twoFactorService = twoFactorService;
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
@@ -115,9 +119,34 @@ public class AuthServiceImpl implements AuthService {
         // La contraseña se comprueba antes que el estado: solo quien la conoce sabe si la cuenta está suspendida.
         // Una cuenta PENDING_VERIFICATION sí inicia sesión (ver register).
         requireNotSuspended(user);
+        if (user.isTwoFactorEnabled()) {
+            // Con 2FA no hay sesión todavía: solo un token temporal para POST /api/v1/auth/2fa/verify-login.
+            return AuthResponse.builder()
+                    .requiresTwoFactor(true)
+                    .tempToken(jwtProvider.generateTwoFactorPendingToken(user.getId()))
+                    .expiresIn(jwtProvider.getPendingTokenTtlMs() / 1000)
+                    .build();
+        }
         user.setLastLoginAt(Instant.now());
         userRepository.save(user);
 
+        return generateAuthResponse(user);
+    }
+
+    /** Segundo paso: token temporal válido y código TOTP o de respaldo → sesión completa. */
+    @Override
+    @Transactional(noRollbackFor = TwoFactorException.class)
+    public AuthResponse verifyTwoFactorLogin(TwoFactorLoginRequest request) {
+        UUID userId = jwtProvider.parseTwoFactorPendingToken(request.getTempToken())
+                .orElseThrow(TwoFactorException::invalidPendingToken);
+        User user = userRepository.findById(userId).orElseThrow(TwoFactorException::invalidPendingToken);
+        requireNotSuspended(user);
+        if (!user.isTwoFactorEnabled()) {
+            throw TwoFactorException.invalidPendingToken();
+        }
+        twoFactorService.verifyLoginCode(user, request.getCode());
+        user.setLastLoginAt(Instant.now());
+        userRepository.save(user);
         return generateAuthResponse(user);
     }
 

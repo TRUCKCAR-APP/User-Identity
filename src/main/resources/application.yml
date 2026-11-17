@@ -56,6 +56,15 @@ app:
     # Access token de 15 min (el frontend lo renueva con el refresh token); refresh token de 7 días, de un solo uso.
     access-token-expiration-ms: ${JWT_EXPIRATION_MS:900000}
     refresh-token-expiration-ms: ${REFRESH_TOKEN_EXPIRATION_MS:604800000}
+  # Doble autenticación (TOTP, RFC 6238). El token temporal del segundo paso dura 5 min y se firma con una llave
+  # derivada: ningún otro servicio lo acepta. El secreto TOTP se guarda cifrado (AES-GCM) con
+  # TRUCKCAR_TOTP_ENCRYPTION_KEY o, si no se define, con una llave derivada del secreto JWT.
+  two-factor:
+    issuer: ${TRUCKCAR_TOTP_ISSUER:TruckCar}
+    pending-token-ttl-ms: ${TRUCKCAR_2FA_PENDING_TTL_MS:300000}
+    encryption-key: ${TRUCKCAR_TOTP_ENCRYPTION_KEY:}
+    max-failed-attempts: ${TRUCKCAR_2FA_MAX_FAILED_ATTEMPTS:5}
+    lockout-ms: ${TRUCKCAR_2FA_LOCKOUT_MS:900000}
   # ADMIN inicial creado por AdminBootstrap si aún no existe. Sin valores no se crea ninguno.
   admin:
     email: ${TRUCKCAR_ADMIN_EMAIL:}

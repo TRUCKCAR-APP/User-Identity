@@ -88,6 +88,31 @@ public class User {
     @Column(name = "affiliation_status", length = 20)
     private AffiliationStatus affiliationStatus;
 
+    // ── Doble autenticación (TOTP). Los secretos van cifrados (TotpSecretCipher); los códigos de respaldo, en SHA-256. ──
+
+    @Builder.Default
+    @Column(name = "two_factor_enabled", nullable = false)
+    private boolean twoFactorEnabled = false;
+
+    @Column(name = "two_factor_secret")
+    private String twoFactorSecret;
+
+    @Column(name = "two_factor_pending_secret")
+    private String twoFactorPendingSecret;
+
+    @Column(name = "two_factor_backup_codes", columnDefinition = "TEXT")
+    private String twoFactorBackupCodes;
+
+    @Column(name = "two_factor_last_step")
+    private Long twoFactorLastStep;
+
+    @Builder.Default
+    @Column(name = "two_factor_failed_attempts", nullable = false)
+    private int twoFactorFailedAttempts = 0;
+
+    @Column(name = "two_factor_locked_until")
+    private Instant twoFactorLockedUntil;
+
     /**
      * Si el conductor puede recibir cargas según su afiliación (la verificación de la cuenta la exigen aparte los
      * servicios de cargas). Independiente: no. De empresa: solo con la afiliación ACTIVA. Sin tipo (cuentas

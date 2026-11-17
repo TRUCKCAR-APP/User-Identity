@@ -15,7 +15,11 @@ public interface AuthService {
 
     AuthResponse register(RegisterRequest request);
 
+    /** Con 2FA activo devuelve requiresTwoFactor y un token temporal en lugar de la sesión. */
     AuthResponse login(LoginRequest request);
+
+    /** Segundo paso del login con 2FA. */
+    AuthResponse verifyTwoFactorLogin(escuelaing.edu.co.truckcar.User_Identity.dto.request.TwoFactorLoginRequest request);
 
     AuthResponse refresh(RefreshTokenRequest request);
 

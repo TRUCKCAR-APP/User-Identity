@@ -43,6 +43,11 @@ public class GlobalExceptionHandler {
         return respond(request, HttpStatus.UNAUTHORIZED, "invalid-token", "Token inválido", ex.getMessage());
     }
 
+    @ExceptionHandler(TwoFactorException.class)
+    public ResponseEntity<ProblemDetail> handleTwoFactor(TwoFactorException ex, HttpServletRequest request) {
+        return respond(request, ex.getStatus(), ex.getType(), ex.getTitle(), ex.getMessage());
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ProblemDetail> handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
         return respond(request, HttpStatus.UNAUTHORIZED, "invalid-credentials", "Credenciales inválidas",

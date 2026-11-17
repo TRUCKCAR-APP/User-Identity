@@ -24,10 +24,26 @@ public class JwtProvider {
     private final long accessTokenExpirationMs;
     private final long refreshTokenExpirationMs;
 
+    /** Alcance del token temporal entre la contraseña y el código 2FA. */
+    public static final String TWO_FACTOR_PENDING_SCOPE = "2FA_PENDING";
+
+    /**
+     * Llave del token temporal del 2FA, derivada del secreto JWT: firma distinta a la de los access tokens, así que el
+     * api-gateway, Notifications y el propio filtro de este servicio lo rechazan como credencial.
+     */
+    private SecretKey pendingKey;
+    private long pendingTokenTtlMs = 300_000;
+
+    public JwtProvider(String secret, long accessTokenExpirationMs, long refreshTokenExpirationMs) {
+        this(secret, accessTokenExpirationMs, refreshTokenExpirationMs, 300_000);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
     public JwtProvider(
             @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.access-token-expiration-ms}") long accessTokenExpirationMs,
-            @Value("${app.jwt.refresh-token-expiration-ms}") long refreshTokenExpirationMs) {
+            @Value("${app.jwt.refresh-token-expiration-ms}") long refreshTokenExpirationMs,
+            @Value("${app.two-factor.pending-token-ttl-ms:300000}") long pendingTokenTtlMs) {
         if (secret == null || secret.isBlank()) {
             throw new IllegalStateException(
                     "Defina TRUCKCAR_JWT_SECRET: secreto JWT en Base64 (>= 256 bits) compartido con api-gateway y Notifications");
@@ -40,6 +56,46 @@ public class JwtProvider {
         }
         this.accessTokenExpirationMs = accessTokenExpirationMs;
         this.refreshTokenExpirationMs = refreshTokenExpirationMs;
+        this.pendingTokenTtlMs = pendingTokenTtlMs;
+        try {
+            byte[] base = Decoders.BASE64.decode(secret);
+            java.security.MessageDigest sha = java.security.MessageDigest.getInstance("SHA-256");
+            sha.update(base);
+            sha.update("truckcar-2fa-pending-v1".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            this.pendingKey = Keys.hmacShaKeyFor(sha.digest());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Token temporal (5 min) que solo sirve en POST /api/v1/auth/2fa/verify-login: sin rol y con scope 2FA_PENDING. */
+    public String generateTwoFactorPendingToken(UUID userId) {
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .subject(userId.toString())
+                .id(UUID.randomUUID().toString())
+                .claim("scope", TWO_FACTOR_PENDING_SCOPE)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusMillis(pendingTokenTtlMs)))
+                .signWith(pendingKey)
+                .compact();
+    }
+
+    /** Usuario del token temporal, o vacío si no es uno válido, vigente y con scope 2FA_PENDING. */
+    public java.util.Optional<UUID> parseTwoFactorPendingToken(String token) {
+        try {
+            Claims claims = Jwts.parser().verifyWith(pendingKey).build().parseSignedClaims(token).getPayload();
+            if (!TWO_FACTOR_PENDING_SCOPE.equals(claims.get("scope", String.class)) || claims.get("role") != null) {
+                return java.util.Optional.empty();
+            }
+            return java.util.Optional.of(UUID.fromString(claims.getSubject()));
+        } catch (JwtException | IllegalArgumentException e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    public long getPendingTokenTtlMs() {
+        return pendingTokenTtlMs;
     }
 
     /**
@@ -92,7 +148,12 @@ public class JwtProvider {
      */
     public boolean validateToken(String token) {
         try {
-            extractClaims(token);
+            Claims claims = extractClaims(token);
+            // Un access token siempre tiene rol y nunca el scope del segundo paso (defensa en profundidad: el token
+            // temporal ya falla la firma con esta llave).
+            if (claims.get("role") == null || claims.get("scope") != null) {
+                return false;
+            }
             return true;
         } catch (JwtException | IllegalArgumentException e) {
             return false;
