@@ -299,7 +299,7 @@ docker run -p 8080:8080 \
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `POST` | `/api/v1/auth/register` | Registro de usuario (solo `CONDUCTOR` o `COORDINADOR`; `ADMIN` responde 400) |
+| `POST` | `/api/v1/auth/register` | Registro de usuario: `CONDUCTOR`, `GENERADOR` o `TRANSPORTADORA` (`COORDINADOR` y `ADMIN` responden 400) |
 | `POST` | `/api/v1/auth/login` | Login (access + refresh token) |
 | `POST` | `/api/v1/auth/refresh` | Renovar access token |
 | `POST` | `/api/v1/auth/logout` | Revocar refresh token |
@@ -309,6 +309,36 @@ docker run -p 8080:8080 \
 | `GET` | `/api/v1/users` | Listado paginado (ADMIN) |
 | `PATCH` | `/api/v1/users/{id}/status` | Suspender/reactivar (ADMIN) |
 | `PATCH` | `/api/v1/users/{id}/role` | Cambiar rol (ADMIN) |
+
+### Empresas transportadoras y afiliación de conductores
+
+Un conductor es **independiente** o **de empresa**:
+- El **independiente** usa la navegación para camión, las rutas y las alertas, pero no recibe cargas.
+- El **de empresa** recibe cargas solo cuando su transportadora lo acepta (afiliación `ACTIVA`) y su cuenta está verificada (`ACTIVE`).
+
+Las cuentas creadas antes de la afiliación no tienen tipo y siguen recibiendo cargas como antes.
+
+| Método | Ruta | Quién | Descripción |
+|---|---|---|---|
+| `GET` | `/api/v1/auth/companies` | público | Catálogo (`id`, `name`) para que el conductor de empresa elija su transportadora al registrarse |
+| `GET` | `/api/v1/companies` | ADMIN, COORDINADOR | Transportadoras con `activeDrivers` y `pendingRequests` |
+| `GET` | `/api/v1/companies/me` | TRANSPORTADORA | Datos de su empresa y conteos |
+| `GET` | `/api/v1/companies/me/drivers` | TRANSPORTADORA | Sus conductores afiliados y las solicitudes |
+| `POST` | `/api/v1/companies/me/drivers` | TRANSPORTADORA | Registra un conductor propio, que nace con la afiliación `ACTIVA` y la cuenta `PENDING_VERIFICATION` (la plataforma la verifica aparte) |
+| `PATCH` | `/api/v1/companies/me/drivers/{driverId}/affiliation` | TRANSPORTADORA | `{"status": "ACTIVA"}` para aceptar o `{"status": "RECHAZADA"}` para rechazar una solicitud |
+| `DELETE` | `/api/v1/companies/me/drivers/{driverId}` | TRANSPORTADORA | Desvincula al conductor, que queda independiente |
+| `PUT` | `/api/v1/users/me/affiliation` | CONDUCTOR | `{"driverType": "INDEPENDIENTE"}` o `{"driverType": "EMPRESA", "companyId": "…"}`, que deja la solicitud `PENDIENTE` |
+
+**Campos de registro:**
+- Conductor: `driverType` (`INDEPENDIENTE` o `EMPRESA`) y, si es de empresa, `companyId`.
+- Transportadora: `companyName` y `companyNit`. El NIT se guarda solo con dígitos y sin el dígito de verificación; si ya existe, responde 409.
+
+**Perfil** (`/users/me` y los listados): incluye `driverType`, `companyId`, `companyName`, `affiliationStatus` y `loadEligible`.
+
+**Evento `user.affiliation.changed`** (tópico de eventos de usuario):
+- Campos: `userId`, `driverType`, `companyId`, `companyName`, `affiliationStatus`, `loadEligible`.
+- Se publica al registrarse un conductor con tipo, cuando la empresa acepta, rechaza o desvincula, cuando el conductor cambia de tipo, y al arrancar como fotografía.
+- fleets-drivers y load-allocation lo usan para que solo un conductor con `loadEligible: true` reciba cargas.
 
 ---
 

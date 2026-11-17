@@ -31,7 +31,10 @@ class AccountStatusSnapshotPublisherTest {
 
     private final UserRepository repository = mock(UserRepository.class);
     private final DomainEventPublisher publisher = mock(DomainEventPublisher.class);
-    private final AccountStatusSnapshotPublisher snapshot = new AccountStatusSnapshotPublisher(repository, publisher);
+    private final escuelaing.edu.co.truckcar.User_Identity.service.CompanyService companyService =
+            mock(escuelaing.edu.co.truckcar.User_Identity.service.CompanyService.class);
+    private final AccountStatusSnapshotPublisher snapshot =
+            new AccountStatusSnapshotPublisher(repository, publisher, companyService);
 
     private static User driver(UserStatus status) {
         return User.builder().id(UUID.randomUUID()).email(UUID.randomUUID() + "@truckcar.co").passwordHash("x")

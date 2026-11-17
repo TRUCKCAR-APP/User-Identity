@@ -17,6 +17,7 @@ import escuelaing.edu.co.truckcar.User_Identity.security.RefreshTokenHasher;
 import escuelaing.edu.co.truckcar.User_Identity.repository.UserRepository;
 import escuelaing.edu.co.truckcar.User_Identity.security.JwtProvider;
 import escuelaing.edu.co.truckcar.User_Identity.service.AuthService;
+import escuelaing.edu.co.truckcar.User_Identity.service.CompanyService;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -32,24 +33,27 @@ import java.util.UUID;
 public class AuthServiceImpl implements AuthService {
 
     // Se restaura la validación de roles exigida por el test
-    private static final Set<Role> SELF_REGISTRABLE_ROLES = EnumSet.of(Role.CONDUCTOR, Role.GENERADOR);
+    private static final Set<Role> SELF_REGISTRABLE_ROLES = EnumSet.of(Role.CONDUCTOR, Role.GENERADOR, Role.TRANSPORTADORA);
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final DomainEventPublisher eventPublisher;
+    private final CompanyService companyService;
 
     public AuthServiceImpl(UserRepository userRepository,
                            RefreshTokenRepository refreshTokenRepository,
                            PasswordEncoder passwordEncoder,
                            JwtProvider jwtProvider,
-                           DomainEventPublisher eventPublisher) {
+                           DomainEventPublisher eventPublisher,
+                           CompanyService companyService) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtProvider = jwtProvider;
         this.eventPublisher = eventPublisher;
+        this.companyService = companyService;
     }
 
     @Override
@@ -64,6 +68,7 @@ public class AuthServiceImpl implements AuthService {
             // COORDINADOR y ADMIN solo los asigna un ADMIN con PATCH /api/v1/users/{id}/role.
             throw new IllegalArgumentException("Rol no permitido");
         }
+        companyService.validateRegistration(assignedRole, request);
 
         User user = User.builder()
                 .email(request.getEmail())
@@ -74,8 +79,14 @@ public class AuthServiceImpl implements AuthService {
                 .role(assignedRole)
                 .status(UserStatus.PENDING_VERIFICATION)
                 .build();
+        if (assignedRole == Role.CONDUCTOR) {
+            companyService.applyDriverRegistration(user, request);
+        }
 
         User savedUser = userRepository.save(user);
+        if (assignedRole == Role.TRANSPORTADORA) {
+            companyService.createCompanyFor(savedUser, request);
+        }
 
         eventPublisher.publish(new UserRegisteredEvent(
                 savedUser.getId(),
@@ -83,6 +94,7 @@ public class AuthServiceImpl implements AuthService {
                 savedUser.getRole().name(),
                 Instant.now().toEpochMilli()
         ));
+        companyService.publishAffiliation(savedUser);
 
         // La cuenta nace PENDING_VERIFICATION y recibe sesión: el conductor entra, ve que su cuenta está pendiente y
         // registra su vehículo mientras un administrador la verifica. Lo que una cuenta pendiente no puede hacer lo

@@ -26,11 +26,17 @@ public interface UserMapper {
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "lastLoginAt", ignore = true)
+    @Mapping(target = "driverType", ignore = true)
+    @Mapping(target = "companyId", ignore = true)
+    @Mapping(target = "affiliationStatus", ignore = true)
     User toEntity(RegisterRequest request);
 
     /**
      * Convierte una entidad {@link User} a {@link UserResponse}.
      */
+    // companyName lo completa quien conoce las empresas (UserServiceImpl, CompanyServiceImpl).
+    @Mapping(target = "companyName", ignore = true)
+    @Mapping(target = "loadEligible", expression = "java(user.affiliationAllowsLoads())")
     UserResponse toResponse(User user);
 
     /**
@@ -44,6 +50,9 @@ public interface UserMapper {
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "lastLoginAt", ignore = true)
+    @Mapping(target = "driverType", ignore = true)
+    @Mapping(target = "companyId", ignore = true)
+    @Mapping(target = "affiliationStatus", ignore = true)
     void updateEntityFromRequest(escuelaing.edu.co.truckcar.User_Identity.dto.request.UpdateProfileRequest request,
                                   @MappingTarget User user);
 }

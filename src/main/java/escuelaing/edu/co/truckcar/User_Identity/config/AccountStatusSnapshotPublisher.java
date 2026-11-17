@@ -5,6 +5,7 @@ import escuelaing.edu.co.truckcar.User_Identity.event.UserStatusChangedEvent;
 import escuelaing.edu.co.truckcar.User_Identity.model.Role;
 import escuelaing.edu.co.truckcar.User_Identity.model.User;
 import escuelaing.edu.co.truckcar.User_Identity.repository.UserRepository;
+import escuelaing.edu.co.truckcar.User_Identity.service.CompanyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -35,6 +36,7 @@ public class AccountStatusSnapshotPublisher implements ApplicationRunner {
 
     private final UserRepository userRepository;
     private final DomainEventPublisher eventPublisher;
+    private final CompanyService companyService;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -48,6 +50,8 @@ public class AccountStatusSnapshotPublisher implements ApplicationRunner {
                 for (User user : page) {
                     eventPublisher.publish(new UserStatusChangedEvent(user.getId(), user.getRole().name(), null,
                             user.getStatus().name(), Instant.now().toEpochMilli()));
+                    // También la afiliación (independiente o de empresa), para que un consumidor nuevo la reconstruya.
+                    companyService.publishAffiliation(user);
                     published++;
                 }
             } while (page.hasNext());

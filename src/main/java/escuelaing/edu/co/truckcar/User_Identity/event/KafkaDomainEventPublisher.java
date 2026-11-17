@@ -35,6 +35,11 @@ public class KafkaDomainEventPublisher implements DomainEventPublisher {
         publishEnvelope("user.status.changed", event.userId(), event);
     }
 
+    @Override
+    public void publish(UserAffiliationChangedEvent event) {
+        publishEnvelope("user.affiliation.changed", event.userId(), event);
+    }
+
     private void publishEnvelope(String eventType, UUID correlationId, Object payload) {
         EventEnvelope<Object> envelope = EventEnvelope.builder()
                 .eventId(UUID.randomUUID())

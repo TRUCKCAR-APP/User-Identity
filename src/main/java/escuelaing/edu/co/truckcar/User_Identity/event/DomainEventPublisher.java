@@ -23,4 +23,6 @@ public interface DomainEventPublisher {
      * Publica un cambio de estado de la cuenta (o la fotografía de arranque).
      */
     void publish(UserStatusChangedEvent event);
+
+    void publish(UserAffiliationChangedEvent event);
 }

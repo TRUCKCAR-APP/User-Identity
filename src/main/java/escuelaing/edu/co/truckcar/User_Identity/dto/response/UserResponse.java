@@ -30,4 +30,11 @@ public class UserResponse {
     private Instant createdAt;
     private Instant updatedAt;
     private Instant lastLoginAt;
+    /** Solo conductores: INDEPENDIENTE o EMPRESA (nulo en cuentas anteriores a la afiliación). */
+    private escuelaing.edu.co.truckcar.User_Identity.model.DriverType driverType;
+    private UUID companyId;
+    private String companyName;
+    private escuelaing.edu.co.truckcar.User_Identity.model.AffiliationStatus affiliationStatus;
+    /** Si la afiliación le permite recibir cargas (la cuenta además debe estar ACTIVE). */
+    private Boolean loadEligible;
 }
