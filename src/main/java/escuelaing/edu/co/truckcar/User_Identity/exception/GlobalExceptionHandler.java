@@ -48,6 +48,11 @@ public class GlobalExceptionHandler {
         return respond(request, ex.getStatus(), ex.getType(), ex.getTitle(), ex.getMessage());
     }
 
+    @ExceptionHandler(PasswordResetException.class)
+    public ResponseEntity<ProblemDetail> handlePasswordReset(PasswordResetException ex, HttpServletRequest request) {
+        return respond(request, ex.getStatus(), ex.getType(), ex.getTitle(), ex.getMessage());
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ProblemDetail> handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
         return respond(request, HttpStatus.UNAUTHORIZED, "invalid-credentials", "Credenciales inválidas",
