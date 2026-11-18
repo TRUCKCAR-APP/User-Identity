@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.web.config.EnableSpringDataWebSupport;
 
 @SpringBootApplication
+@org.springframework.scheduling.annotation.EnableAsync
 @EnableSpringDataWebSupport(pageSerializationMode = EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO)
 public class UserIdentityApplication {
 

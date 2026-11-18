@@ -21,6 +21,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByEmail(String email);
 
+    /** Recuperación de contraseña: el conductor puede escribir el correo con otras mayúsculas que al registrarse. */
+    Optional<User> findFirstByEmailIgnoreCase(String email);
+
     boolean existsByEmail(String email);
 
     boolean existsByRole(Role role);

@@ -339,6 +339,38 @@ Authenticator: TOTP (RFC 6238), HMAC-SHA1, 6 dígitos y pasos de 30 s. No usa SM
 
 `/users/me` incluye `twoFactorEnabled`.
 
+### Recuperar la contraseña (código al correo)
+
+| Método | Ruta | Cuerpo | Respuesta |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/password/forgot` | `{"email"}` | **202**, siempre la misma respuesta, exista o no la cuenta |
+| `POST` | `/api/v1/auth/password/verify` | `{"email", "code"}` | `{"resetToken", "expiresInSeconds": 600}` |
+| `POST` | `/api/v1/auth/password/reset` | `{"resetToken", "newPassword"}` | 200, y se cierran todas las sesiones abiertas |
+
+**El código:**
+- Tiene 6 dígitos y vale **10 minutos** (`Su código para cambiar la contraseña de TruckCar: 482913`).
+- Se guarda como HMAC-SHA256 con una llave derivada del secreto JWT, nunca en claro.
+- Pedir uno nuevo invalida el anterior.
+
+**Límites:**
+- Un código por minuto y cinco por hora por cuenta. Además, el gateway limita los intentos por IP.
+- A los **5 códigos equivocados** el código se invalida (429 `reset-code-locked`).
+
+**Después de verificar:**
+- `verify` entrega un token de un solo uso: 32 bytes al azar, guardado como SHA-256, que vence en 10 minutos.
+- `reset` exige la misma regla de contraseña del registro (8 a 72 caracteres).
+
+**Sin revelar cuentas:**
+- Un correo sin cuenta, una cuenta suspendida o un código vencido o equivocado responden igual.
+- El envío es asíncrono, así que la respuesta tarda lo mismo en todos los casos.
+
+**Errores:** RFC 7807 `invalid-reset-code`, `reset-code-locked` e `invalid-reset-token`.
+
+**El correo:**
+- Se envía por SMTP: Gmail en `smtp.gmail.com:587` con STARTTLS y una **contraseña de aplicación**.
+- Las credenciales van solo en el `.env` (ver variables).
+- Sin `SMTP_HOST` no se envía nada y queda un aviso en el log, sin el código.
+
 ### Empresas transportadoras y afiliación de conductores
 
 Un conductor es **independiente** o **de empresa**:
@@ -383,6 +415,9 @@ Las cuentas creadas antes de la afiliación no tienen tipo y siguen recibiendo c
 | `JWT_ACCESS_EXPIRATION` | TTL del access token (ms) | `900000` (15 min) |
 | `JWT_REFRESH_EXPIRATION` | TTL del refresh token (ms) | `604800000` (7 días) |
 | `SERVER_PORT` | Puerto del servidor | `8080` |
+| `SMTP_HOST`, `SMTP_PORT` | Servidor SMTP del correo de recuperación (Gmail: `smtp.gmail.com`, `587`) | sin valor (no se envía) / `587` |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | Cuenta y **contraseña de aplicación** de Gmail. Solo en el `.env` | — |
+| `TRUCKCAR_MAIL_FROM` | Remitente del correo | `SMTP_USERNAME` |
 
 ---
 

@@ -5,6 +5,21 @@ spring:
   application:
     name: user-identity
 
+  # Correo del código para recuperar la contraseña. Gmail: smtp.gmail.com:587 con STARTTLS y una contraseña de
+  # aplicación (cuenta con verificación en dos pasos). Solo en el .env; sin SMTP_HOST no se envía nada.
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+
   datasource:
     # Fuera de Docker (IDE/tests) la conexión es directa y el esquema va en currentSchema. En Docker se pasa por
     # PgBouncer (SPRING_DATASOURCE_URL) y el search_path lo fija el rol user_identity.
@@ -59,6 +74,9 @@ app:
   # Doble autenticación (TOTP, RFC 6238). El token temporal del segundo paso dura 5 min y se firma con una llave
   # derivada: ningún otro servicio lo acepta. El secreto TOTP se guarda cifrado (AES-GCM) con
   # TRUCKCAR_TOTP_ENCRYPTION_KEY o, si no se define, con una llave derivada del secreto JWT.
+  # Remitente del correo de recuperación (por defecto, la misma cuenta SMTP).
+  mail:
+    from: ${TRUCKCAR_MAIL_FROM:${SMTP_USERNAME:}}
   two-factor:
     issuer: ${TRUCKCAR_TOTP_ISSUER:TruckCar}
     pending-token-ttl-ms: ${TRUCKCAR_2FA_PENDING_TTL_MS:300000}
@@ -88,6 +106,10 @@ truckcar:
 # Las trazas se exportan por OTLP al otel-collector cuando se define MANAGEMENT_OTLP_TRACING_ENDPOINT (en Docker,
 # http://otel-collector:4318/v1/traces); sin ella no se exporta nada.
 management:
+  health:
+    # El correo es opcional: un SMTP caído o sin configurar no marca el servicio como caído.
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:
