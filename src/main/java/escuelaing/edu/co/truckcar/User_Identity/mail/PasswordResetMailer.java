@@ -26,12 +26,19 @@ public class PasswordResetMailer {
     private final String from;
     private final String host;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public PasswordResetMailer(ObjectProvider<JavaMailSender> mailSender,
                                @Value("${app.mail.from:}") String from,
-                               @Value("${spring.mail.host:}") String host) {
+                               @Value("${spring.mail.host:}") String host,
+                               @Value("${spring.mail.username:}") String username) {
         this.mailSender = mailSender;
-        this.from = from;
+        // docker-compose pasa TRUCKCAR_MAIL_FROM vacío si no está en el .env: entonces el remitente es la cuenta SMTP.
+        this.from = from == null || from.isBlank() ? username : from;
         this.host = host;
+    }
+
+    PasswordResetMailer(ObjectProvider<JavaMailSender> mailSender, String from, String host) {
+        this(mailSender, from, host, "");
     }
 
     public boolean isConfigured() {

@@ -42,6 +42,13 @@ class PasswordResetMailerTest {
     }
 
     @Test
+    void anEmptySenderFallsBackToTheSmtpAccount() {
+        JavaMailSender sender = mock(JavaMailSender.class);
+        PasswordResetMailer mailer = new PasswordResetMailer(provider(sender), "", "smtp.gmail.com", "truckcar.app@gmail.com");
+        assertThat(mailer.isConfigured()).as("TRUCKCAR_MAIL_FROM vacío en docker-compose").isTrue();
+    }
+
+    @Test
     void withoutSmtpNothingIsSent() {
         JavaMailSender sender = mock(JavaMailSender.class);
         PasswordResetMailer mailer = new PasswordResetMailer(provider(sender), "", "");
